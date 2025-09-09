@@ -10,6 +10,29 @@
 - **헬스체크**: https://3000-ik8y77ob4uiboh392dqtg-6532622b.e2b.dev/api/health
 - **GitHub**: (설정 예정)
 
+## 🎯 **v2.0 업그레이드 완료** 
+### ✨ 새로 추가된 기능
+
+#### 1️⃣ **PwC 시드 온톨로지 자동 생성**
+- **56개 엔티티**: 조직(PwC Global→Korea→본부→Practice), 산업군, 역량, 기술, 산출물, KPI
+- **43개 관계**: contains, provides, uses, generates, measures 등
+- **계층 구조**: 실제 PwC 조직도 반영
+- **클라이언트 매핑**: 삼성, LG, SK, 현대 등 주요 기업 포함
+- **별명 지원**: '디지털전환↔DX', 'AI↔인공지능' 등 동의어 처리
+
+#### 2️⃣ **문서 자동 처리 및 확장**  
+- **초기 매핑**: 파일명/제목 패턴으로 1차 자동 분류
+- **NER 엔진**: 기존 시드 + 새 엔티티 발견 (Mock LLM)
+- **Triple 추출**: 주체-관계-객체 패턴 매칭 
+- **신뢰도 기반 분류**: 자동승인(75%↑) vs 검토필요(50-75%) vs 거절(50%↓)
+- **실시간 확장**: 승인된 항목 즉시 그래프 반영
+
+#### 3️⃣ **최소 검수 워크플로우 (10분 이내)**
+- **Top10 후보**: 불확실한 항목만 선별 제시
+- **원클릭 승인/거절**: 간단한 UI로 빠른 결정
+- **학습 피드백**: 승인/거절 이력이 다음 처리에 자동 반영
+- **검토 대기 관리**: 실시간 대기 항목 수 추적
+
 ## 🎯 현재 구현된 기능
 
 ### ✅ 핵심 WoW 포인트
@@ -36,15 +59,46 @@
 ### 🔧 기능적 API 엔드포인트
 
 #### 온톨로지 관련
-- `GET /api/ontology/nodes` - 그래프 노드 데이터 조회
-- `GET /api/ontology/links` - 노드 간 관계 데이터 조회
-- `POST /api/documents/upload` - 문서 업로드 및 온톨로지 자동 확장
+- `GET /api/ontology/nodes` - 그래프 노드 데이터 조회 (현재: 56개 시드)
+- `GET /api/ontology/links` - 노드 간 관계 데이터 조회 (현재: 43개 시드)
+- `GET /api/ontology/status` - 온톨로지 현황 (시드 vs 추가, 카테고리별 통계)
+- `POST /api/ontology/reset` - 시드 온톨로지로 초기화
+- `POST /api/documents/upload` - **고급 문서 처리** 및 온톨로지 자동 확장
 
-#### 검색 및 탐색
+#### **📄 문서 처리 API (신규)**
+```json
+POST /api/documents/upload
+{
+  "fileName": "삼성DS_SOP_제안서.pdf",
+  "fileSize": 2048000,
+  "fileContent": "..."
+}
+
+Response:
+{
+  "success": true,
+  "processedDocument": {
+    "id": "doc-1234",
+    "confidence": 0.87,
+    "documentType": "proposal", 
+    "client": "samsung",
+    "tags": ["digital", "ai", "supply-chain"]
+  },
+  "autoApproved": { "entities": 3, "relationships": 2 },
+  "needsReview": { "count": 5, "topCandidates": [...] },
+  "newNodes": [...], "newLinks": [...]
+}
+```
+
+#### **🔍 검수 관리 API (신규)**
+- `GET /api/review/pending` - 검토 대기 항목 조회
+- `POST /api/review/:id/decision` - 승인/거절 처리 및 학습 피드백
+
+#### 검색 및 탐색  
 - `POST /api/search` - 지식 탐색 및 경로 하이라이트
   ```json
   {
-    "query": "DS 사업부 S&OP 사례"
+    "query": "삼성 디지털전환 AI"
   }
   ```
   
@@ -131,25 +185,36 @@
   - Build: Vite + PM2 (개발)
 - **마지막 업데이트**: 2024-12-20
 
-## 🎯 미구현 기능 (향후 계획)
+## 🎯 구현 완료 vs 향후 계획
 
-### Phase 2: 실제 데이터 처리
-- [ ] 실제 PDF/문서 파싱 (PDF.js + OCR API)
-- [ ] LLM 기반 NER/관계 추출 (OpenAI/Claude API)  
-- [ ] Cloudflare D1 데이터베이스 영구 저장
+### ✅ **Phase 1 완료** (부트스트랩 + 자동확장)
+- [x] **PwC 시드 온톨로지**: 56개 엔티티, 43개 관계, 실제 조직구조
+- [x] **자동 매핑**: 파일명/제목 패턴 + NER + Triple 추출 (Mock)
+- [x] **신뢰도 기반 분류**: 자동승인 vs 검토필요 vs 거절
+- [x] **실시간 확장**: 문서 → 엔티티/관계 → 그래프 반영
+- [x] **최소 검수**: Top10 후보, 원클릭 승인/거절, 학습 피드백
+- [x] **3D 시각화**: 점멸 애니메이션, 레이저 경로, WoW 효과
+
+### 🔄 **Phase 2 진행중** (실제 데이터 처리)
+- [ ] 실제 PDF/DOCX 파싱 (PDF.js, mammoth.js)
+- [ ] 실제 LLM API 연동 (OpenAI/Claude NER + 관계추출)  
+- [ ] Cloudflare D1 영구 저장 + 버전 관리
+- [ ] 검수 UI 완성 (승인/거절 패널)
 - [ ] 문서 메타데이터 및 소스 추적
 
-### Phase 3: 고급 기능
-- [ ] 사용자 승인/거절 워크플로우
+### 🎯 **Phase 3 예정** (거버넌스 + 고급기능)
+- [ ] 권한 상속 그래프 (클라이언트/계약별 접근제어)
+- [ ] PII/민감정보 자동 마스킹
 - [ ] 온톨로지 스키마 자동 진화
 - [ ] 실제 PwC 템플릿 PPT 생성 (python-pptx)
-- [ ] 권한 관리 및 보안 (RBAC)
+- [ ] Git-style 버전관리 및 롤백
 
-### Phase 4: 엔터프라이즈 기능
-- [ ] SharePoint/Google Drive 커넥터
-- [ ] 대용량 그래프 최적화 (Neo4j 연동)
-- [ ] MLOps 파이프라인 및 모델 버전 관리
-- [ ] 고급 분석 및 인사이트 AI
+### 🚀 **Phase 4 예정** (엔터프라이즈)
+- [ ] SharePoint/Google Drive/Box 커넥터
+- [ ] Neo4j Cloud 대용량 그래프 최적화
+- [ ] MLOps 파이프라인 및 A/B 테스트
+- [ ] 고급 분석 AI 및 인사이트 자동생성
+- [ ] ROI 측정 및 비즈니스 임팩트 추적
 
 ## 🔧 추천 다음 단계
 
@@ -168,7 +233,36 @@
 2. **A/B 테스트** - 기존 방식 대비 효율성 측정
 3. **사용자 피드백** - 실제 컨설턴트 사용성 테스트
 
+## 🎬 **데모 시나리오 (v2.0)**
+
+### Step 1: 시드 온톨로지 확인
+- 페이지 로드 시 **56개 PwC 엔티티**가 3D 그래프로 표시
+- 조직 계층: PwC Global → Korea → Advisory/Consulting → Practice
+- 산업-클라이언트 매핑: 삼성(TMT), 현대(Automotive), SK(Energy) 등
+
+### Step 2: 실제 문서 업로드 시뮬레이션  
+- "삼성DS_SOP_제안서.pdf" 드래그&드롭
+- **10초 후**: 새로운 노드들이 네온 점멸하며 등장
+- **인사이트 패널**: 문서 분석 결과 실시간 표시
+  - 신뢰도 87%, 자동승인 5개, 검토필요 3개
+
+### Step 3: 지식 탐색
+- 검색: "삼성 디지털전환 AI"  
+- **레이저 경로**: 삼성 → 디지털전환 → AI/ML → Palantir 연결
+- **관련 KPI**: ROI 150%, 자동화율 90% 하이라이트
+
+### Step 4: 검수 워크플로우
+- 검토 필요 항목 팝업: "Quantum Computing (65% 신뢰도)"
+- **원클릭 승인** → 즉시 그래프에 반영 + 점멸 효과
+- KPI 업데이트: 자동승인율 91% → 93%
+
+### Step 5: PwC 템플릿 생성
+- 빨간 글로우 버튼 클릭 → 5슬라이드 자동 생성
+- 모든 내용에 **근거 문서 링크** 자동 첨부
+- "삼성 AI 기반 공급망 최적화" Executive Summary 완성
+
 ---
 
-**🚀 현재 상태**: MVP 구현 완료, 모든 핵심 WoW 포인트 동작 확인
-**📈 다음 목표**: 실제 데이터 연동 및 Cloudflare Pages 프로덕션 배포
+**🚀 현재 상태**: **Phase 1 완료** - 부트스트랩 + 자동확장 + 최소검수 동작 확인  
+**📈 다음 목표**: 실제 LLM 연동, D1 영구저장, 검수 UI 완성 (Phase 2)  
+**🎯 비즈니스 가치**: 온톨로지 관리시간 **월 2시간**, 제안서 생성 **50% 단축** 목표
