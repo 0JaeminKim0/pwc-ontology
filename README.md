@@ -1,21 +1,174 @@
-```txt
-npm install
-npm run dev
+# PwC 온톨로지 자동 구축 서비스
+
+## 프로젝트 개요
+- **이름**: PwC 온톨로지 자동 구축 서비스
+- **목표**: 문서가 유입될수록 온톨로지가 자동 성장, 컨설턴트는 클릭 승인만, 그래프에서 바로 PwC 스타일 산출물 생성
+- **특징**: 시각적으로 강력한 WoW 포인트를 제공하는 제품 수준 서비스
+
+## 🌐 URL 정보
+- **개발 서버**: https://3000-ik8y77ob4uiboh392dqtg-6532622b.e2b.dev
+- **헬스체크**: https://3000-ik8y77ob4uiboh392dqtg-6532622b.e2b.dev/api/health
+- **GitHub**: (설정 예정)
+
+## 🎯 현재 구현된 기능
+
+### ✅ 핵심 WoW 포인트
+1. **3D 그래프 뷰어**
+   - Three.js 기반 3D 온톨로지 시각화
+   - 마우스 드래그로 360도 회전 탐색
+   - 노드 타입별 다른 3D 모양 (조직=팔면체, 서비스=큐브, 기술=사면체 등)
+
+2. **실시간 점멸 애니메이션**
+   - 신규 노드 추가 시 네온 파동 효과
+   - 펄스 애니메이션으로 "지식이 자라나는 느낌" 시각화
+   - PwC 브랜드 컬러 기반 글로우 효과
+
+3. **레이저 경로 하이라이트**
+   - 검색 시 관련 노드들이 초록색 레이저로 연결
+   - 3초간 하이라이트 후 자동 복원
+   - 직관적인 지식 탐색 경로 시각화
+
+4. **실시간 인사이트 패널**
+   - KPI 지표 실시간 업데이트 (매핑 정확도, 처리 시간, 자동 승인율)
+   - 슬라이드 애니메이션으로 인사이트 카드 등장
+   - 문서 업로드 시 자동 인사이트 생성
+
+### 🔧 기능적 API 엔드포인트
+
+#### 온톨로지 관련
+- `GET /api/ontology/nodes` - 그래프 노드 데이터 조회
+- `GET /api/ontology/links` - 노드 간 관계 데이터 조회
+- `POST /api/documents/upload` - 문서 업로드 및 온톨로지 자동 확장
+
+#### 검색 및 탐색
+- `POST /api/search` - 지식 탐색 및 경로 하이라이트
+  ```json
+  {
+    "query": "DS 사업부 S&OP 사례"
+  }
+  ```
+  
+#### 시스템 상태
+- `GET /api/health` - 서비스 상태 확인
+
+### 🎨 사용자 인터페이스
+1. **제어판** (좌상단)
+   - 지식 탐색 검색바
+   - 문서 업로드 (PDF, DOCX, PPTX 지원)
+   - PwC 템플릿 자동 생성 버튼 (글로우 효과)
+
+2. **인사이트 패널** (우상단)  
+   - 실시간 KPI 지표
+   - 자동 발견 인사이트 카드
+   - 슬라이드 애니메이션 효과
+
+3. **상태바** (하단 중앙)
+   - 현재 노드/관계 개수
+   - 마지막 업데이트 시간
+
+## 🏗️ 데이터 아키텍처
+
+### 데이터 모델
+```javascript
+// 노드 구조
+{
+  id: 'unique-id',
+  label: '표시명',
+  type: 'organization|service|capability|technology|deliverable',
+  x, y, z: 3D 좌표,
+  color: 'hex-color',
+  isNew: boolean // 신규 노드 여부
+}
+
+// 관계 구조  
+{
+  source: 'source-node-id',
+  target: 'target-node-id', 
+  type: 'offers|includes|provides|uses|generates',
+  strength: 0.0-1.0 // 관계 강도
+}
 ```
 
-```txt
-npm run deploy
-```
+### 저장 서비스
+- **현재**: 메모리 기반 Mock 데이터
+- **향후**: Cloudflare D1 (SQLite) 또는 Neo4j Cloud 연동
 
-[For generating/synchronizing types based on your Worker configuration run](https://developers.cloudflare.com/workers/wrangler/commands/#types):
+### 데이터 플로우
+1. 문서 업로드 → 파싱 → 엔티티/관계 추출 → 그래프 확장
+2. 검색 쿼리 → 유사도 계산 → 경로 탐색 → 시각적 하이라이트
+3. 실시간 인사이트 → KPI 계산 → 애니메이션 업데이트
 
-```txt
-npm run cf-typegen
-```
+## 🎮 사용자 가이드
 
-Pass the `CloudflareBindings` as generics when instantiation `Hono`:
+### 기본 탐색
+1. **3D 그래프 조작**
+   - 마우스 드래그: 그래프 회전
+   - 마우스 휠: 줌 인/아웃
+   - 자동 회전: 2초마다 천천히 회전
 
-```ts
-// src/index.ts
-const app = new Hono<{ Bindings: CloudflareBindings }>()
-```
+2. **지식 검색**
+   - 검색창에 키워드 입력 (예: "디지털 서비스", "AI 기술")
+   - Enter 키 또는 검색 버튼 클릭
+   - 관련 노드들이 레이저 경로로 연결되어 하이라이트
+
+3. **문서 업로드**
+   - 파일 선택 후 업로드 (PDF, DOCX, PPTX)
+   - 2초 후 새로운 노드가 점멸하며 추가
+   - 인사이트 패널에 처리 결과 표시
+
+4. **PwC 템플릿 생성**
+   - 빨간색 글로우 버튼 클릭
+   - 3초 후 5슬라이드 템플릿 생성 완료 알림
+   - Executive Summary, 현황분석, 솔루션 등 포함
+
+## 🚀 배포 현황
+- **플랫폼**: Cloudflare Pages (개발 환경)
+- **상태**: ✅ 활성 (MVP 버전)
+- **기술 스택**: 
+  - Frontend: React + Three.js + D3.js + GSAP
+  - Backend: Hono + TypeScript
+  - Styling: TailwindCSS + Custom CSS Animations
+  - Build: Vite + PM2 (개발)
+- **마지막 업데이트**: 2024-12-20
+
+## 🎯 미구현 기능 (향후 계획)
+
+### Phase 2: 실제 데이터 처리
+- [ ] 실제 PDF/문서 파싱 (PDF.js + OCR API)
+- [ ] LLM 기반 NER/관계 추출 (OpenAI/Claude API)  
+- [ ] Cloudflare D1 데이터베이스 영구 저장
+- [ ] 문서 메타데이터 및 소스 추적
+
+### Phase 3: 고급 기능
+- [ ] 사용자 승인/거절 워크플로우
+- [ ] 온톨로지 스키마 자동 진화
+- [ ] 실제 PwC 템플릿 PPT 생성 (python-pptx)
+- [ ] 권한 관리 및 보안 (RBAC)
+
+### Phase 4: 엔터프라이즈 기능
+- [ ] SharePoint/Google Drive 커넥터
+- [ ] 대용량 그래프 최적화 (Neo4j 연동)
+- [ ] MLOps 파이프라인 및 모델 버전 관리
+- [ ] 고급 분석 및 인사이트 AI
+
+## 🔧 추천 다음 단계
+
+### 즉시 개선 가능
+1. **실제 문서 파싱 연동** - PDF.js로 클라이언트 사이드 파싱
+2. **LLM API 연동** - OpenAI API로 엔티티/관계 추출
+3. **D1 데이터베이스** - 영구 저장 및 버전 관리
+
+### 데모 강화
+1. **더 많은 샘플 데이터** - 실제 PwC 프로젝트 기반 온톨로지
+2. **애니메이션 개선** - 더 부드러운 트랜지션 효과
+3. **반응형 디자인** - 모바일/태블릿 최적화
+
+### 비즈니스 가치 증명
+1. **실제 ROI 계산** - 시간 절약, 품질 향상 지표
+2. **A/B 테스트** - 기존 방식 대비 효율성 측정
+3. **사용자 피드백** - 실제 컨설턴트 사용성 테스트
+
+---
+
+**🚀 현재 상태**: MVP 구현 완료, 모든 핵심 WoW 포인트 동작 확인
+**📈 다음 목표**: 실제 데이터 연동 및 Cloudflare Pages 프로덕션 배포
