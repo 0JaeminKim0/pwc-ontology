@@ -66,8 +66,27 @@ function Graph3D({ nodes, links, onNodeClick, highlightPath }) {
       mouseY = event.clientY;
     };
 
-    const onMouseUp = () => {
-      isMouseDown = false;
+    const onMouseUp = (event) => {
+      if (isMouseDown) {
+        isMouseDown = false;
+        return;
+      }
+      
+      // Handle node clicks
+      const mouse = new THREE.Vector2();
+      mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+      mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+      const raycaster = new THREE.Raycaster();
+      raycaster.setFromCamera(mouse, camera);
+      
+      const intersects = raycaster.intersectObjects(group.children);
+      if (intersects.length > 0) {
+        const clickedObject = intersects[0].object;
+        if (clickedObject.userData.onClick) {
+          clickedObject.userData.onClick();
+        }
+      }
     };
 
     const onWheel = (event) => {
@@ -157,6 +176,15 @@ function Graph3D({ nodes, links, onNodeClick, highlightPath }) {
       const mesh = new THREE.Mesh(geometry, material);
       mesh.position.set(node.x - 150, node.y - 75, node.z || 0);
       mesh.userData = { node };
+
+      // Add click handler for PDF page nodes
+      if (node.type === 'pdf_page') {
+        mesh.userData.onClick = () => {
+          if (onNodeClick) {
+            onNodeClick(node);
+          }
+        };
+      }
 
       // Add glow effect for new nodes
       if (node.isNew) {
@@ -283,6 +311,7 @@ function Graph3D({ nodes, links, onNodeClick, highlightPath }) {
 function ControlPanel({ onSearch, onUpload, onGenerateSlides }) {
   const [query, setQuery] = useState('');
   const [isUploading, setIsUploading] = useState(false);
+  const [processingMode, setProcessingMode] = useState('ontology');
 
   const handleSearch = () => {
     if (query.trim()) {
@@ -296,7 +325,7 @@ function ControlPanel({ onSearch, onUpload, onGenerateSlides }) {
       setIsUploading(true);
       // Simulate upload delay
       setTimeout(() => {
-        onUpload(file);
+        onUpload(file, processingMode);
         setIsUploading(false);
         event.target.value = '';
       }, 2000);
@@ -337,23 +366,56 @@ function ControlPanel({ onSearch, onUpload, onGenerateSlides }) {
       )
     ),
     
+    // Processing Mode Selection
+    React.createElement('div', { className: 'mb-3' },
+      React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-2' },
+        React.createElement('i', { className: 'fas fa-cogs mr-1' }),
+        '처리 모드'
+      ),
+      React.createElement('div', { className: 'flex gap-2' },
+        React.createElement('label', { className: 'flex items-center' },
+          React.createElement('input', {
+            type: 'radio',
+            value: 'ontology',
+            checked: processingMode === 'ontology',
+            onChange: (e) => setProcessingMode(e.target.value),
+            className: 'mr-1'
+          }),
+          React.createElement('span', { className: 'text-sm' }, '온톨로지')
+        ),
+        React.createElement('label', { className: 'flex items-center' },
+          React.createElement('input', {
+            type: 'radio',
+            value: 'pages',
+            checked: processingMode === 'pages',
+            onChange: (e) => setProcessingMode(e.target.value),
+            className: 'mr-1'
+          }),
+          React.createElement('span', { className: 'text-sm' }, 'PDF 페이지')
+        )
+      )
+    ),
+
     // File Upload Section
     React.createElement('div', { className: 'mb-4' },
       React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-2' },
         React.createElement('i', { className: 'fas fa-upload mr-1' }),
         '문서 업로드'
       ),
+      processingMode === 'pages' && React.createElement('div', {
+        className: 'mb-2 p-2 bg-blue-50 rounded text-xs text-blue-700'
+      }, '📄 PDF 페이지 모드: 각 페이지가 개별 노드로 생성되어 페이지간 관계를 시각화합니다'),
       React.createElement('input', {
         type: 'file',
         onChange: handleFileUpload,
-        accept: '.pdf,.docx,.pptx',
+        accept: processingMode === 'pages' ? '.pdf' : '.pdf,.docx,.pptx',
         className: 'w-full px-3 py-2 border border-gray-300 rounded-lg file:mr-4 file:py-1 file:px-4 file:rounded-full file:border-0 file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100'
       }),
       isUploading && React.createElement('div', { 
         className: 'mt-2 text-sm text-blue-600 flex items-center gap-2' 
       },
         React.createElement('i', { className: 'fas fa-spinner fa-spin' }),
-        '문서 처리 중...'
+        processingMode === 'pages' ? 'PDF 페이지 분석 중...' : '문서 처리 중...'
       )
     ),
     
@@ -425,6 +487,111 @@ function StatusBar({ nodeCount, linkCount, lastUpdate }) {
   );
 }
 
+// PDF Page Detail Modal Component
+function PDFPageModal({ page, onClose }) {
+  if (!page) return null;
+
+  return React.createElement('div', {
+    className: 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50',
+    onClick: onClose
+  },
+    React.createElement('div', {
+      className: 'bg-white rounded-lg p-6 max-w-4xl max-h-[80vh] overflow-y-auto',
+      onClick: (e) => e.stopPropagation()
+    },
+      // Header
+      React.createElement('div', { className: 'flex justify-between items-start mb-4' },
+        React.createElement('div', null,
+          React.createElement('h2', { className: 'text-2xl font-bold text-gray-800' },
+            `페이지 ${page.pageNumber}: ${page.title}`
+          ),
+          React.createElement('p', { className: 'text-gray-600 mt-1' },
+            `${page.wordCount}단어 | 신뢰도: ${(page.confidence * 100).toFixed(0)}%`
+          )
+        ),
+        React.createElement('button', {
+          onClick: onClose,
+          className: 'text-gray-500 hover:text-gray-700 text-2xl'
+        }, '×')
+      ),
+
+      // Content
+      React.createElement('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-6' },
+        // Left column - Content
+        React.createElement('div', null,
+          React.createElement('h3', { className: 'text-lg font-semibold mb-2' }, '페이지 내용'),
+          React.createElement('div', { 
+            className: 'bg-gray-50 p-4 rounded border max-h-60 overflow-y-auto text-sm'
+          }, page.content),
+          
+          React.createElement('h3', { className: 'text-lg font-semibold mt-4 mb-2' }, '요약'),
+          React.createElement('p', { className: 'text-gray-700' }, page.summary)
+        ),
+
+        // Right column - Metadata
+        React.createElement('div', null,
+          React.createElement('h3', { className: 'text-lg font-semibold mb-2' }, '키워드'),
+          React.createElement('div', { className: 'flex flex-wrap gap-2 mb-4' },
+            ...page.keywords.map((keyword, index) =>
+              React.createElement('span', {
+                key: index,
+                className: 'px-2 py-1 bg-blue-100 text-blue-800 rounded text-sm'
+              }, keyword)
+            )
+          ),
+
+          // Images
+          page.images && page.images.length > 0 && React.createElement('div', { className: 'mb-4' },
+            React.createElement('h3', { className: 'text-lg font-semibold mb-2' }, 
+              `이미지 (${page.images.length}개)`
+            ),
+            React.createElement('div', { className: 'space-y-2' },
+              ...page.images.map((img, index) =>
+                React.createElement('div', {
+                  key: index,
+                  className: 'p-2 bg-yellow-50 rounded border border-yellow-200'
+                },
+                  React.createElement('div', { className: 'text-sm font-medium' }, img.description),
+                  React.createElement('div', { className: 'text-xs text-gray-600' }, `타입: ${img.type}`)
+                )
+              )
+            )
+          ),
+
+          // Tables  
+          page.tables && page.tables.length > 0 && React.createElement('div', null,
+            React.createElement('h3', { className: 'text-lg font-semibold mb-2' }, 
+              `표 (${page.tables.length}개)`
+            ),
+            React.createElement('div', { className: 'space-y-2' },
+              ...page.tables.map((table, index) =>
+                React.createElement('div', {
+                  key: index,
+                  className: 'p-2 bg-green-50 rounded border border-green-200'
+                },
+                  React.createElement('div', { className: 'text-sm font-medium' }, 
+                    `${table.headers.length}개 컬럼 표`
+                  ),
+                  React.createElement('div', { className: 'text-xs text-gray-600' },
+                    `헤더: ${table.headers.join(', ')}`
+                  )
+                )
+              )
+            )
+          )
+        )
+      ),
+
+      // Footer
+      React.createElement('div', { className: 'mt-6 pt-4 border-t border-gray-200' },
+        React.createElement('p', { className: 'text-sm text-gray-600' },
+          `문서: ${page.documentTitle} | 생성 시간: ${new Date().toLocaleString()}`
+        )
+      )
+    )
+  );
+}
+
 // Main App Component
 function App() {
   const [nodes, setNodes] = useState([]);
@@ -437,6 +604,7 @@ function App() {
     { label: '자동 승인율', value: '87%' }
   ]);
   const [lastUpdate, setLastUpdate] = useState('');
+  const [selectedPage, setSelectedPage] = useState(null);
 
   // Load initial data
   useEffect(() => {
@@ -490,16 +658,17 @@ function App() {
     }
   };
 
-  const handleFileUpload = async (file) => {
+  const handleFileUpload = async (file, processingMode = 'ontology') => {
     try {
-      // Enhanced file upload processing with real PwC taxonomy
+      // Enhanced file upload with PDF pages support
       const response = await fetch('/api/documents/upload', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           fileName: file.name,
           fileSize: file.size,
-          fileContent: `Mock content for ${file.name}` // 실제로는 파일 내용
+          fileContent: `Mock content for ${file.name}`,
+          processingMode: processingMode
         })
       });
       
@@ -514,45 +683,67 @@ function App() {
         setLinks(newLinks);
         setLastUpdate(new Date().toLocaleTimeString());
         
-        // Update insights with detailed processing results
+        // Update insights based on processing mode
         setTimeout(() => {
-          setInsights([
-            result.message,
-            `📄 문서: ${result.processedDocument.filename}`,
-            `🎯 문서 타입: ${result.processedDocument.documentType}`,
-            `👤 클라이언트: ${result.processedDocument.client}`,
-            `📊 전체 신뢰도: ${(result.processedDocument.confidence * 100).toFixed(1)}%`,
-            `✅ 자동 승인: 엔티티 ${result.autoApproved.entities}개, 관계 ${result.autoApproved.relationships}개`,
-            `⏳ 검토 필요: ${result.needsReview.count}개 항목`,
-            '🔄 지식 그래프 자동 확장 완료!'
-          ]);
-        }, 500);
-        
-        // Update KPIs with real metrics
-        const mappingAccuracy = Math.min(98, 94 + Math.random() * 4);
-        const processingTime = (1.5 + Math.random() * 1.0).toFixed(1);
-        const autoApprovalRate = Math.min(95, 87 + Math.random() * 8);
-        
-        setKpis([
-          { label: '매핑 정확도', value: `${mappingAccuracy.toFixed(1)}%` },
-          { label: '처리 시간', value: `${processingTime}초` },
-          { label: '자동 승인율', value: `${autoApprovalRate.toFixed(0)}%` },
-          { label: '검토 대기', value: `${result.needsReview.count}개` }
-        ]);
-
-        // Show review candidates if any
-        if (result.needsReview.count > 0) {
-          setTimeout(() => {
-            const reviewInfo = result.needsReview.topCandidates.map(
-              candidate => `🔍 ${candidate.text} (${(candidate.confidence * 100).toFixed(0)}%)`
-            ).join('\n');
+          if (result.processingMode === 'pages') {
+            // PDF 페이지 모드 인사이트
+            setInsights([
+              result.message,
+              `📄 PDF 문서: ${result.processedDocument.filename}`,
+              `📑 총 페이지: ${result.pdfAnalysis.pages}개`,
+              `🔗 페이지 관계: ${result.pdfAnalysis.pageRelationships}개`,
+              `🏷️ 주요 주제: ${result.pdfAnalysis.mainTopics.join(', ')}`,
+              `⏱️ 처리 시간: ${result.pdfAnalysis.processingTime}ms`,
+              '✨ 각 페이지가 개별 노드로 생성되었습니다',
+              '🎯 페이지 노드를 클릭하여 상세 내용을 확인하세요'
+            ]);
             
-            if (confirm(`검토가 필요한 ${result.needsReview.count}개 항목이 있습니다:\n\n${reviewInfo}\n\n검토 패널을 여시겠습니까?`)) {
-              // 검토 패널 열기 (향후 구현)
-              setInsights(prev => [...prev, '📋 검토 패널에서 승인/거절을 진행해주세요']);
+            // PDF 특화 KPIs
+            setKpis([
+              { label: '페이지 수', value: `${result.pdfAnalysis.pages}개` },
+              { label: '페이지 관계', value: `${result.pdfAnalysis.pageRelationships}개` },
+              { label: '주제 수', value: `${result.pdfAnalysis.mainTopics.length}개` },
+              { label: '처리 시간', value: `${(result.pdfAnalysis.processingTime/1000).toFixed(1)}초` }
+            ]);
+          } else {
+            // 기존 온톨로지 모드 인사이트
+            setInsights([
+              result.message,
+              `📄 문서: ${result.processedDocument.filename}`,
+              `🎯 문서 타입: ${result.processedDocument.documentType}`,
+              `👤 클라이언트: ${result.processedDocument.client}`,
+              `📊 전체 신뢰도: ${(result.processedDocument.confidence * 100).toFixed(1)}%`,
+              `✅ 자동 승인: 엔티티 ${result.autoApproved.entities}개, 관계 ${result.autoApproved.relationships}개`,
+              `⏳ 검토 필요: ${result.needsReview.count}개 항목`,
+              '🔄 지식 그래프 자동 확장 완료!'
+            ]);
+            
+            // 기존 KPIs
+            const mappingAccuracy = Math.min(98, 94 + Math.random() * 4);
+            const processingTime = (1.5 + Math.random() * 1.0).toFixed(1);
+            const autoApprovalRate = Math.min(95, 87 + Math.random() * 8);
+            
+            setKpis([
+              { label: '매핑 정확도', value: `${mappingAccuracy.toFixed(1)}%` },
+              { label: '처리 시간', value: `${processingTime}초` },
+              { label: '자동 승인율', value: `${autoApprovalRate.toFixed(0)}%` },
+              { label: '검토 대기', value: `${result.needsReview.count}개` }
+            ]);
+
+            // Show review candidates if any
+            if (result.needsReview && result.needsReview.count > 0) {
+              setTimeout(() => {
+                const reviewInfo = result.needsReview.topCandidates.map(
+                  candidate => `🔍 ${candidate.text} (${(candidate.confidence * 100).toFixed(0)}%)`
+                ).join('\n');
+                
+                if (confirm(`검토가 필요한 ${result.needsReview.count}개 항목이 있습니다:\n\n${reviewInfo}\n\n검토 패널을 여시겠습니까?`)) {
+                  setInsights(prev => [...prev, '📋 검토 패널에서 승인/거절을 진행해주세요']);
+                }
+              }, 2000);
             }
-          }, 2000);
-        }
+          }
+        }, 500);
       }
     } catch (error) {
       console.error('Upload failed:', error);
@@ -560,27 +751,58 @@ function App() {
     }
   };
 
-  const handleGenerateSlides = () => {
-    // Mock slide generation with visual feedback
-    setInsights([
-      '🎨 PwC 템플릿 생성 시작...',
-      '📊 데이터 분석 및 시각화 준비',
-      '📝 Executive Summary 작성 중',
-      '🎯 핵심 인사이트 추출 완료',
-      '✅ 5슬라이드 템플릿 생성 완료!'
-    ]);
+  const handleNodeClick = (node) => {
+    if (node.type === 'pdf_page') {
+      setSelectedPage(node);
+      setInsights(prev => [
+        ...prev,
+        `📄 페이지 ${node.pageNumber} 선택: ${node.title}`,
+        `🔍 키워드: ${node.keywords.slice(0, 3).join(', ')}`,
+        `📊 단어 수: ${node.wordCount}개`
+      ]);
+    }
+  };
 
-    // Simulate slide building animation
-    setTimeout(() => {
-      alert('🎉 PwC 템플릿이 성공적으로 생성되었습니다!\n\n포함된 내용:\n- Executive Summary\n- 현황 분석\n- 핵심 이슈\n- 제안 솔루션\n- 기대 효과\n\n모든 슬라이드에는 근거 문서 링크가 포함되어 있습니다.');
-    }, 3000);
+  const handleGenerateSlides = () => {
+    // Check if there are PDF pages in the graph
+    const pdfPages = nodes.filter(node => node.type === 'pdf_page');
+    
+    if (pdfPages.length > 0) {
+      // PDF 기반 템플릿 생성
+      setInsights([
+        '🎨 PDF 기반 PwC 템플릿 생성 시작...',
+        `📑 ${pdfPages.length}개 페이지 분석 중`,
+        '📊 페이지별 핵심 내용 추출',
+        '📝 Executive Summary 자동 생성',
+        '🎯 페이지 흐름 기반 스토리 구성',
+        '✅ PDF 맞춤형 5슬라이드 템플릿 완성!'
+      ]);
+
+      setTimeout(() => {
+        const pageTopics = pdfPages.map(page => `${page.pageNumber}. ${page.title}`).join('\n');
+        alert(`🎉 PDF 기반 PwC 템플릿이 생성되었습니다!\n\n📑 참조된 페이지:\n${pageTopics}\n\n🎯 생성된 슬라이드:\n- Executive Summary (페이지 1 기반)\n- 현황 분석 (페이지 2 기반)\n- 제안 솔루션 (페이지 3 기반)\n- 구현 계획 (페이지 4 기반)\n- 기대 효과 (페이지 5 기반)\n\n모든 슬라이드에 원본 PDF 페이지 링크가 포함되어 있습니다.`);
+      }, 4000);
+    } else {
+      // 기존 온톨로지 기반 템플릿 생성
+      setInsights([
+        '🎨 PwC 템플릿 생성 시작...',
+        '📊 데이터 분석 및 시각화 준비',
+        '📝 Executive Summary 작성 중',
+        '🎯 핵심 인사이트 추출 완료',
+        '✅ 5슬라이드 템플릿 생성 완료!'
+      ]);
+
+      setTimeout(() => {
+        alert('🎉 PwC 템플릿이 성공적으로 생성되었습니다!\n\n포함된 내용:\n- Executive Summary\n- 현황 분석\n- 핵심 이슈\n- 제안 솔루션\n- 기대 효과\n\n모든 슬라이드에는 근거 문서 링크가 포함되어 있습니다.');
+      }, 3000);
+    }
   };
 
   return React.createElement('div', { className: 'min-h-screen relative' },
     React.createElement(Graph3D, {
       nodes: nodes,
       links: links,
-      onNodeClick: (node) => console.log('Node clicked:', node),
+      onNodeClick: handleNodeClick,
       highlightPath: highlightPath
     }),
     
@@ -599,6 +821,12 @@ function App() {
       nodeCount: nodes.length,
       linkCount: links.length,
       lastUpdate: lastUpdate
+    }),
+
+    // PDF Page Modal
+    selectedPage && React.createElement(PDFPageModal, {
+      page: selectedPage,
+      onClose: () => setSelectedPage(null)
     })
   );
 }
