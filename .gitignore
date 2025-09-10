@@ -9,7 +9,9 @@ pids
 
 # Compiled binary addons
 build/
-dist/
+
+# Railway build outputs (keep dist for deployment)
+# dist/
 
 # Environment variables
 .env
