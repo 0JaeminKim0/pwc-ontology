@@ -86,6 +86,17 @@ function getContentType(filename: string): string {
 // Use renderer for HTML pages
 app.use(renderer)
 
+// Railway 전용 인라인 HTML 라우트 (정적 파일 우회)
+app.get('/inline', async (c) => {
+  try {
+    const inlineHtml = readFileSync(join(process.cwd(), 'dist/inline.html'), 'utf8')
+    return c.html(inlineHtml)
+  } catch (error) {
+    console.error('인라인 HTML 로드 실패:', error)
+    return c.text('인라인 HTML을 로드할 수 없습니다', 500)
+  }
+})
+
 // API Routes
 app.get('/api/health', (c) => {
   return c.json({ status: 'healthy', timestamp: new Date().toISOString() })

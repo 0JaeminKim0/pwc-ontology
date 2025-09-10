@@ -13,6 +13,9 @@ COPY . .
 # Build the application
 RUN npm run build
 
+# Build inline HTML for Railway static file workaround
+RUN npm run build:inline
+
 # Remove devDependencies to reduce image size (build 후)
 RUN npm prune --production
 

@@ -8,6 +8,7 @@
     "start": "node server.js",
     "start:railway": "PORT=${PORT:-3000} node server-express.js",
     "start:express": "node server-express.js",
+    "build:inline": "node build-inline.js",
     "preview": "wrangler pages dev dist",
     "deploy": "npm run build && wrangler pages deploy dist",
     "deploy:prod": "npm run build && wrangler pages deploy dist --project-name pwc-ontology",
