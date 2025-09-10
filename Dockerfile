@@ -1,23 +1,17 @@
-# Railway 배포용 Dockerfile
+# Railway 배포용 Dockerfile - 독립 서버 전용
 FROM node:18-alpine
 
 WORKDIR /app
 
-# Install dependencies (build에 필요한 devDependencies 포함)
+# Install only runtime dependencies (no build needed)
 COPY package*.json ./
-RUN npm ci
+RUN npm ci --only=production
 
-# Copy source code
+# Copy source code and static files
 COPY . .
 
-# Build the application
-RUN npm run build
-
-# Build inline HTML for Railway static file workaround
-RUN npm run build:inline
-
-# Remove devDependencies to reduce image size (build 후)
-RUN npm prune --production
+# Create dist directory (no build processes needed)
+RUN mkdir -p dist
 
 # Expose port
 EXPOSE 3000
