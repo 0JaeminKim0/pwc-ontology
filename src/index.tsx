@@ -1,35 +1,87 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import { serveStatic } from '@hono/node-server/serve-static'
 import { renderer } from './renderer'
+import { readFileSync, existsSync } from 'fs'
+import { join } from 'path'
 
 const app = new Hono()
 
 // Enable CORS for API routes
 app.use('/api/*', cors())
 
-// Serve static files with explicit handling for Railway
-app.use('/static/*', async (c, next) => {
-  console.log(`[Static] Requested: ${c.req.path}`)
+// Serve static files manually for Railway compatibility
+app.get('/static/*', async (c) => {
+  const path = c.req.path.replace('/static/', '')
+  const filePath = join(process.cwd(), 'public', 'static', path)
+  
+  console.log(`[Static] Requested: ${c.req.path} -> ${filePath}`)
+  
+  if (!existsSync(filePath)) {
+    console.log(`[Static] File not found: ${filePath}`)
+    return c.text('File not found', 404)
+  }
+  
   try {
-    return await serveStatic({ 
-      root: './public',
-      onNotFound: (path) => {
-        console.log(`[Static] File not found: ${path}`)
-      }
-    })(c, next)
+    const content = readFileSync(filePath)
+    const contentType = getContentType(path)
+    
+    return c.body(content, 200, {
+      'Content-Type': contentType,
+      'Cache-Control': 'public, max-age=3600'
+    })
   } catch (error) {
-    console.error(`[Static] Error serving ${c.req.path}:`, error)
-    return c.text('Static file error', 500)
+    console.error(`[Static] Error reading ${filePath}:`, error)
+    return c.text('Error reading file', 500)
   }
 })
 
 // Serve favicon explicitly
 app.get('/favicon.ico', async (c) => {
-  return c.body(new Uint8Array([0]), 200, {
-    'Content-Type': 'image/x-icon'
-  })
+  const faviconPath = join(process.cwd(), 'public', 'favicon.ico')
+  
+  if (!existsSync(faviconPath)) {
+    return c.body(new Uint8Array([0]), 200, {
+      'Content-Type': 'image/x-icon'
+    })
+  }
+  
+  try {
+    const content = readFileSync(faviconPath)
+    return c.body(content, 200, {
+      'Content-Type': 'image/x-icon'
+    })
+  } catch (error) {
+    console.error('Error serving favicon:', error)
+    return c.body(new Uint8Array([0]), 200, {
+      'Content-Type': 'image/x-icon'
+    })
+  }
 })
+
+// Helper function to determine content type
+function getContentType(filename: string): string {
+  const ext = filename.split('.').pop()?.toLowerCase()
+  
+  switch (ext) {
+    case 'js':
+      return 'application/javascript'
+    case 'css':
+      return 'text/css'
+    case 'html':
+      return 'text/html'
+    case 'json':
+      return 'application/json'
+    case 'png':
+      return 'image/png'
+    case 'jpg':
+    case 'jpeg':
+      return 'image/jpeg'
+    case 'ico':
+      return 'image/x-icon'
+    default:
+      return 'text/plain'
+  }
+}
 
 // Use renderer for HTML pages
 app.use(renderer)
