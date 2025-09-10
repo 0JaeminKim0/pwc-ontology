@@ -3,9 +3,9 @@ FROM node:18-alpine
 
 WORKDIR /app
 
-# Install dependencies
+# Install dependencies (build에 필요한 devDependencies 포함)
 COPY package*.json ./
-RUN npm ci --only=production
+RUN npm ci
 
 # Copy source code
 COPY . .
@@ -13,8 +13,11 @@ COPY . .
 # Build the application
 RUN npm run build
 
+# Remove devDependencies to reduce image size (build 후)
+RUN npm prune --production
+
 # Expose port
 EXPOSE 3000
 
-# Start command
-CMD ["npm", "start"]
+# Start command for Railway
+CMD ["npm", "run", "start:railway"]
