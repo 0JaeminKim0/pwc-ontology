@@ -30,8 +30,8 @@ function Graph3D({ nodes, links, onNodeClick, highlightPath }) {
     directionalLight.position.set(50, 50, 50);
     scene.add(directionalLight);
 
-    // Controls for orbit
-    camera.position.set(0, 0, 300);
+    // Controls for orbit - 카메라를 더 멀리 배치
+    camera.position.set(0, 0, 600);
 
     // Group for all graph elements
     const group = new THREE.Group();
@@ -90,8 +90,8 @@ function Graph3D({ nodes, links, onNodeClick, highlightPath }) {
     };
 
     const onWheel = (event) => {
-      camera.position.z += event.deltaY * 0.1;
-      camera.position.z = Math.max(100, Math.min(800, camera.position.z));
+      camera.position.z += event.deltaY * 0.3;
+      camera.position.z = Math.max(300, Math.min(1500, camera.position.z));
     };
 
     renderer.domElement.addEventListener('mousedown', onMouseDown);
@@ -206,7 +206,8 @@ function Graph3D({ nodes, links, onNodeClick, highlightPath }) {
       }
       
       const mesh = new THREE.Mesh(geometry, material);
-      mesh.position.set(node.x - 150, node.y - 75, node.z || 0);
+      // 노드 간격을 넓히기 위해 스케일을 3배로 증가
+      mesh.position.set((node.x - 150) * 3, (node.y - 75) * 3, (node.z || 0) * 2);
       mesh.userData = { node };
 
       // Add click handler for PDF page nodes (both types)
@@ -288,8 +289,8 @@ function Graph3D({ nodes, links, onNodeClick, highlightPath }) {
       if (!sourceNode || !targetNode) return;
 
       const geometry = new THREE.BufferGeometry().setFromPoints([
-        new THREE.Vector3(sourceNode.x - 150, sourceNode.y - 75, sourceNode.z || 0),
-        new THREE.Vector3(targetNode.x - 150, targetNode.y - 75, targetNode.z || 0)
+        new THREE.Vector3((sourceNode.x - 150) * 3, (sourceNode.y - 75) * 3, (sourceNode.z || 0) * 2),
+        new THREE.Vector3((targetNode.x - 150) * 3, (targetNode.y - 75) * 3, (targetNode.z || 0) * 2)
       ]);
 
       const material = new THREE.LineBasicMaterial({ 
