@@ -347,6 +347,308 @@ function getMainHTML() {
 const mockNodes = []
 const mockLinks = []
 
+// Mock 삼성전자 DX SCM PDF 처리 결과 생성
+function generateMockPDFProcessingResult(uploadData) {
+  const startTime = Date.now()
+  const fileName = uploadData.fileName || 'samsung_dx_scm.pdf'
+  
+  // PDF 페이지 이미지 노드들 (5개 페이지)
+  const pageImageNodes = []
+  for (let i = 1; i <= 5; i++) {
+    const angle = ((i - 1) / 5) * 2 * Math.PI
+    const radius = 400
+    
+    pageImageNodes.push({
+      id: `page-img-${Date.now()}-${i}`,
+      documentId: `pdf-doc-${Date.now()}`,
+      pageNumber: i,
+      imageDataUrl: generateMockPageImageDataURL(i),
+      width: 1920,
+      height: 1080,
+      aspectRatio: 1920 / 1080,
+      type: 'pdf_page_image',
+      category: 'document_page_image',
+      x: Math.cos(angle) * radius,
+      y: Math.sin(angle) * radius,
+      z: i * 40,
+      color: '#ffffff',
+      label: getPageTitle(i),
+      pageTitle: getPageTitle(i),
+      isNew: true,
+      metadata: {
+        pageNumber: i,
+        title: getPageTitle(i),
+        extractedText: getPageText(i),
+        wordCount: 50 + i * 20,
+        hasTitle: true,
+        hasImages: i <= 3,
+        hasTables: i >= 3,
+        hasCharts: i >= 2,
+        pageType: getPageType(i),
+        keywords: getPageKeywords(i),
+        summary: getPageSummary(i),
+        aiKeywords: getAIKeywords(i),
+        consultingInsights: getConsultingInsights(i),
+        confidence: 0.9 + Math.random() * 0.09
+      }
+    })
+  }
+  
+  // AI 키워드 노드들 (11개)
+  const aiKeywordNodes = []
+  const aiKeywords = [
+    'Generative AI', 'SCM', 'Multi Agent', 'NSCM', 'AI Orchestrator',
+    'Digital Transformation', 'Data Analytics', 'Machine Learning',
+    'Process Automation', 'Business Intelligence', 'Cloud Computing'
+  ]
+  
+  aiKeywords.forEach((keyword, index) => {
+    const angle = (index / aiKeywords.length) * 2 * Math.PI
+    const radius = 700 + index * 20
+    
+    aiKeywordNodes.push({
+      id: `ai-keyword-${Date.now()}-${index}`,
+      label: keyword,
+      type: 'ai_keyword',
+      category: 'ai_concept',
+      x: Math.cos(angle) * radius,
+      y: Math.sin(angle) * radius,
+      z: 200 + index * 40,
+      color: '#e74c3c',
+      size: 8,
+      isNew: true,
+      confidence: 0.9 + Math.random() * 0.1,
+      metadata: {
+        keyword: keyword,
+        category: 'AI Technology',
+        relevance: 'High',
+        extractedFrom: '삼성전자 DX SCM 제안서'
+      }
+    })
+  })
+  
+  // 컨설팅 인사이트 노드들 (11개)
+  const consultingInsightNodes = []
+  const consultingInsights = [
+    'PoC 구축', '업무 프로세스 최적화', 'AI 도입 전략', '사용성 제고',
+    '프로젝트 구조화', '단계별 접근법', '체계적 제안', '비용 효율성',
+    '리스크 관리', '성과 측정', '변화 관리'
+  ]
+  
+  consultingInsights.forEach((insight, index) => {
+    const angle = (index / consultingInsights.length + Math.PI) * 2 * Math.PI
+    const radius = 800 + index * 30
+    
+    consultingInsightNodes.push({
+      id: `consulting-${Date.now()}-${index}`,
+      label: insight,
+      type: 'consulting_insight',
+      category: 'business_insight',
+      x: Math.cos(angle) * radius,
+      y: Math.sin(angle) * radius,
+      z: 160 + index * 50,
+      color: '#f39c12',
+      size: 10,
+      isNew: true,
+      confidence: 0.85 + Math.random() * 0.1,
+      metadata: {
+        insight: insight,
+        category: 'Business Strategy',
+        impact: 'Medium',
+        extractedFrom: '삼성전자 DX SCM 제안서'
+      }
+    })
+  })
+  
+  // 모든 노드 통합
+  const allNodes = [...pageImageNodes, ...aiKeywordNodes, ...consultingInsightNodes]
+  
+  // 관계 생성
+  const relationships = []
+  
+  // 페이지 간 순차 관계
+  for (let i = 0; i < pageImageNodes.length - 1; i++) {
+    relationships.push({
+      source: pageImageNodes[i].id,
+      target: pageImageNodes[i + 1].id,
+      type: 'next_page',
+      strength: 1.0,
+      evidence: '순차적 페이지'
+    })
+  }
+  
+  // 페이지와 AI 키워드 간 관계
+  aiKeywordNodes.forEach((aiNode, index) => {
+    const sourcePageIndex = index % pageImageNodes.length
+    relationships.push({
+      source: pageImageNodes[sourcePageIndex].id,
+      target: aiNode.id,
+      type: 'contains_ai_concept',
+      strength: 0.8,
+      evidence: 'AI 개념 추출'
+    })
+  })
+  
+  // 페이지와 컨설팅 인사이트 간 관계
+  consultingInsightNodes.forEach((consultingNode, index) => {
+    const sourcePageIndex = index % pageImageNodes.length
+    relationships.push({
+      source: pageImageNodes[sourcePageIndex].id,
+      target: consultingNode.id,
+      type: 'generates_insight',
+      strength: 0.7,
+      evidence: '컨설팅 인사이트 도출'
+    })
+  })
+  
+  const processingTime = Date.now() - startTime
+  
+  return {
+    success: true,
+    processingMode: 'unified',
+    processedDocument: {
+      id: `pdf-doc-${Date.now()}`,
+      filename: fileName,
+      title: fileName.replace('.pdf', ''),
+      aiKeywordCount: aiKeywordNodes.length,
+      consultingInsightCount: consultingInsightNodes.length
+    },
+    pdfAnalysis: {
+      pages: pageImageNodes.length,
+      pageNodes: pageImageNodes.length,
+      pageRelationships: pageImageNodes.length - 1,
+      mainTopics: ['Gen AI', 'SCM', 'Multi Agent', 'NSCM', 'AI Orchestrator']
+    },
+    pdfImageAnalysis: {
+      pageImages: pageImageNodes.length,
+      pageRelationships: relationships.length,
+      mainTopics: ['Digital Transformation', 'AI Strategy', 'Process Optimization']
+    },
+    ontologyAnalysis: {
+      entities: aiKeywordNodes.length + consultingInsightNodes.length,
+      relationships: relationships.filter(r => r.type !== 'next_page').length
+    },
+    totalProcessingTime: processingTime,
+    newNodes: allNodes,
+    newLinks: relationships,
+    message: `삼성전자 DX SCM 생성형 AI 제안서 통합 처리 완료: ${allNodes.length}개 노드, ${relationships.length}개 관계 생성`
+  }
+}
+
+// PwC 시드 온톨로지 생성
+function generatePwCSeedOntology() {
+  const nodes = [
+    // 조직 노드들
+    { id: 'pwc-korea', label: 'PwC Korea', type: 'organization', x: 0, y: 0, z: 0, color: '#e74c3c' },
+    { id: 'ds-division', label: 'DS 사업부', type: 'division', x: 100, y: 50, z: 20, color: '#c0392b' },
+    { id: 'consulting-practice', label: 'Consulting Practice', type: 'practice', x: -100, y: 50, z: 20, color: '#e67e22' },
+    
+    // 클라이언트 노드들
+    { id: 'samsung', label: '삼성', type: 'client', x: 200, y: 0, z: 0, color: '#2980b9' },
+    { id: 'lg', label: 'LG', type: 'client', x: 150, y: 100, z: 0, color: '#2980b9' },
+    { id: 'sk', label: 'SK', type: 'client', x: 100, y: 150, z: 0, color: '#2980b9' },
+    
+    // 서비스 노드들
+    { id: 'digital-transformation', label: 'Digital Transformation', type: 'capability', x: 0, y: 100, z: 40, color: '#2ecc71' },
+    { id: 'ai-consulting', label: 'AI Consulting', type: 'capability', x: 50, y: 120, z: 40, color: '#2ecc71' },
+    { id: 'scm-optimization', label: 'SCM Optimization', type: 'capability', x: -50, y: 120, z: 40, color: '#2ecc71' }
+  ]
+  
+  const links = [
+    { source: 'pwc-korea', target: 'ds-division', type: 'contains' },
+    { source: 'pwc-korea', target: 'consulting-practice', type: 'contains' },
+    { source: 'ds-division', target: 'samsung', type: 'serves' },
+    { source: 'consulting-practice', target: 'digital-transformation', type: 'provides' },
+    { source: 'consulting-practice', target: 'ai-consulting', type: 'provides' },
+    { source: 'consulting-practice', target: 'scm-optimization', type: 'provides' }
+  ]
+  
+  return { nodes, links }
+}
+
+// Helper functions for mock data generation
+function generateMockPageImageDataURL(pageNumber) {
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`
+    <svg width="400" height="300" xmlns="http://www.w3.org/2000/svg">
+      <rect width="400" height="300" fill="white" stroke="#ddd" stroke-width="2"/>
+      <text x="200" y="150" fill="#2c3e50" font-family="Arial" font-size="16" text-anchor="middle" font-weight="bold">
+        페이지 ${pageNumber}
+      </text>
+    </svg>
+  `)}`
+}
+
+function getPageTitle(pageNumber) {
+  const titles = [
+    '삼성전자 DX SCM 생성형 AI 제안서',
+    'Agenda',
+    '프로젝트 추진 목표',
+    '구현 계획',
+    '기대 효과'
+  ]
+  return titles[pageNumber - 1] || `페이지 ${pageNumber}`
+}
+
+function getPageText(pageNumber) {
+  const texts = [
+    '삼성전자 DX SCM 생성형 AI 기반 SCM 데이터 조회 MVP 구축',
+    'I. 제안 개요 II. 수행 범위 III. 사업 관리 IV. 제안사 소개',
+    'Gen AI 기반 내/외부 데이터의 업무 활용을 극대화하여 NSCM 시스템의 사용성 제고',
+    '3단계 구현 계획: Phase 1, Phase 2, Phase 3',
+    '업무 효율성 향상 및 의사결정 품질 개선'
+  ]
+  return texts[pageNumber - 1] || `페이지 ${pageNumber} 텍스트`
+}
+
+function getPageType(pageNumber) {
+  const types = ['cover', 'agenda', 'strategy', 'implementation', 'results']
+  return types[pageNumber - 1] || 'content'
+}
+
+function getPageKeywords(pageNumber) {
+  const keywords = [
+    ['삼성전자', 'DX', 'SCM', '생성형 AI', 'MVP'],
+    ['제안개요', '수행범위', '사업관리', '제안사소개'],
+    ['Gen AI', 'NSCM', 'AI Orchestrator', 'Multi Agent'],
+    ['구현계획', 'Phase', '단계별', '로드맵'],
+    ['기대효과', '업무효율성', '의사결정', '품질개선']
+  ]
+  return keywords[pageNumber - 1] || [`키워드${pageNumber}`]
+}
+
+function getPageSummary(pageNumber) {
+  const summaries = [
+    'PwC의 삼성전자 DX SCM 생성형 AI 기반 데이터 조회 서비스 PoC 제안서 표지',
+    '제안서의 전체 구성과 진행 순서를 나타내는 아젠다',
+    'Gen AI를 활용한 SCM 데이터 활용 극대화 및 NSCM 시스템 사용성 제고 방안',
+    '3단계로 구성된 체계적인 구현 계획 및 로드맵',
+    '프로젝트 완료 후 예상되는 업무 효율성 향상 및 기대 효과'
+  ]
+  return summaries[pageNumber - 1] || `페이지 ${pageNumber} 요약`
+}
+
+function getAIKeywords(pageNumber) {
+  const aiKeywords = [
+    ['Generative AI', 'SCM', 'Data Analytics'],
+    ['Project Scope', 'Service Delivery', 'Implementation'],
+    ['Multi Agent', 'AI Orchestrator', 'NSCM'],
+    ['Roadmap', 'Phase Management', 'Milestone'],
+    ['ROI', 'Efficiency', 'Optimization']
+  ]
+  return aiKeywords[pageNumber - 1] || ['AI', 'Technology']
+}
+
+function getConsultingInsights(pageNumber) {
+  const insights = [
+    ['PoC 구축', '업무 프로세스 최적화', 'AI 도입 전략'],
+    ['프로젝트 구조화', '단계별 접근법', '체계적 제안'],
+    ['사용성 제고', '시스템 통합', '데이터 활용'],
+    ['위험 관리', '품질 보증', '성과 측정'],
+    ['변화 관리', '지속적 개선', '가치 실현']
+  ]
+  return insights[pageNumber - 1] || ['컨설팅', '전략']
+}
+
 // 서버 시작
 loadContent()
 
@@ -415,6 +717,122 @@ const server = createServer(async (req, res) => {
         'Content-Length': Buffer.byteLength(linksData)
       })
       res.end(linksData)
+      return
+    }
+    
+    // 문서 업로드 API
+    if (url === '/api/documents/upload' && req.method === 'POST') {
+      console.log('🎯 문서 업로드 요청')
+      
+      try {
+        // 요청 본문 읽기
+        let body = ''
+        req.on('data', chunk => { body += chunk })
+        req.on('end', () => {
+          try {
+            const uploadData = JSON.parse(body)
+            
+            // Mock 삼성전자 DX SCM PDF 처리 결과 생성
+            const mockResult = generateMockPDFProcessingResult(uploadData)
+            
+            // 생성된 노드/링크를 런타임 데이터에 추가
+            mockNodes.push(...mockResult.newNodes)
+            mockLinks.push(...mockResult.newLinks)
+            
+            const responseData = JSON.stringify(mockResult)
+            res.writeHead(200, {
+              'Content-Type': 'application/json',
+              'Content-Length': Buffer.byteLength(responseData)
+            })
+            res.end(responseData)
+            console.log(`✅ 문서 업로드 처리 완료: ${mockResult.newNodes.length}개 노드, ${mockResult.newLinks.length}개 링크`)
+          } catch (parseError) {
+            console.error('❌ JSON 파싱 오류:', parseError)
+            const errorData = JSON.stringify({ success: false, error: 'Invalid JSON' })
+            res.writeHead(400, {
+              'Content-Type': 'application/json',
+              'Content-Length': Buffer.byteLength(errorData)
+            })
+            res.end(errorData)
+          }
+        })
+      } catch (error) {
+        console.error('❌ 문서 업로드 오류:', error)
+        const errorData = JSON.stringify({ success: false, error: error.message })
+        res.writeHead(500, {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(errorData)
+        })
+        res.end(errorData)
+      }
+      return
+    }
+    
+    // 온톨로지 리셋 API
+    if (url === '/api/ontology/reset' && req.method === 'POST') {
+      console.log('🎯 온톨로지 리셋 요청')
+      
+      try {
+        let body = ''
+        req.on('data', chunk => { body += chunk })
+        req.on('end', () => {
+          try {
+            const resetData = JSON.parse(body)
+            
+            if (resetData.loadSeed) {
+              // PwC 시드 온톨로지 로드
+              const seedData = generatePwCSeedOntology()
+              mockNodes.splice(0, mockNodes.length, ...seedData.nodes)
+              mockLinks.splice(0, mockLinks.length, ...seedData.links)
+              
+              const responseData = JSON.stringify({
+                success: true,
+                nodeCount: seedData.nodes.length,
+                linkCount: seedData.links.length,
+                message: 'PwC 시드 온톨로지 로드 완료'
+              })
+              res.writeHead(200, {
+                'Content-Type': 'application/json',
+                'Content-Length': Buffer.byteLength(responseData)
+              })
+              res.end(responseData)
+            } else {
+              // 그래프 완전 초기화
+              mockNodes.splice(0, mockNodes.length)
+              mockLinks.splice(0, mockLinks.length)
+              
+              const responseData = JSON.stringify({
+                success: true,
+                nodeCount: 0,
+                linkCount: 0,
+                message: '그래프 초기화 완료'
+              })
+              res.writeHead(200, {
+                'Content-Type': 'application/json',
+                'Content-Length': Buffer.byteLength(responseData)
+              })
+              res.end(responseData)
+            }
+            console.log(`✅ 온톨로지 리셋 완료: ${mockNodes.length}개 노드, ${mockLinks.length}개 링크`)
+          } catch (parseError) {
+            console.error('❌ JSON 파싱 오류:', parseError)
+            const errorData = JSON.stringify({ success: false, error: 'Invalid JSON' })
+            res.writeHead(400, {
+              'Content-Type': 'application/json',
+              'Content-Length': Buffer.byteLength(errorData)
+            })
+            res.end(errorData)
+          }
+        })
+      } catch (error) {
+        console.error('❌ 온톨로지 리셋 오류:', error)
+        const errorData = JSON.stringify({ success: false, error: error.message })
+        res.writeHead(500, {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(errorData)
+        })
+        res.end(errorData)
+      }
       return
     }
     
