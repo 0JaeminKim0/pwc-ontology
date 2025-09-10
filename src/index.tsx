@@ -8,8 +8,28 @@ const app = new Hono()
 // Enable CORS for API routes
 app.use('/api/*', cors())
 
-// Serve static files
-app.use('/static/*', serveStatic({ root: './public' }))
+// Serve static files with explicit handling for Railway
+app.use('/static/*', async (c, next) => {
+  console.log(`[Static] Requested: ${c.req.path}`)
+  try {
+    return await serveStatic({ 
+      root: './public',
+      onNotFound: (path) => {
+        console.log(`[Static] File not found: ${path}`)
+      }
+    })(c, next)
+  } catch (error) {
+    console.error(`[Static] Error serving ${c.req.path}:`, error)
+    return c.text('Static file error', 500)
+  }
+})
+
+// Serve favicon explicitly
+app.get('/favicon.ico', async (c) => {
+  return c.body(new Uint8Array([0]), 200, {
+    'Content-Type': 'image/x-icon'
+  })
+})
 
 // Use renderer for HTML pages
 app.use(renderer)
