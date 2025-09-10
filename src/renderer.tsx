@@ -27,8 +27,43 @@ export const renderer = jsxRenderer(({ children }) => {
         {/* GSAP for animations */}
         <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
         
-        {/* Custom styles */}
-        <link href="/static/styles.css" rel="stylesheet" />
+        {/* Custom styles - 인라인으로 포함하여 Railway 호환성 확보 */}
+        <style>{`
+          /* PwC 온톨로지 서비스 - 추가 스타일 */
+          .graph-container { cursor: grab; user-select: none; }
+          .graph-container:active { cursor: grabbing; }
+          
+          /* 제어판 스타일 개선 */
+          .control-panel { animation: fadeInLeft 0.6s ease-out; }
+          @keyframes fadeInLeft { from { opacity: 0; transform: translateX(-30px); } to { opacity: 1; transform: translateX(0); } }
+          
+          /* 인사이트 패널 스타일 개선 */
+          .insight-panel { animation: fadeInRight 0.6s ease-out; }
+          @keyframes fadeInRight { from { opacity: 0; transform: translateX(30px); } to { opacity: 1; transform: translateX(0); } }
+          
+          /* 버튼 호버 효과 개선 */
+          button { transition: all 0.3s ease; }
+          button:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2); }
+          
+          /* PwC 브랜드 컬러 */
+          .pwc-red { color: #e74c3c; }
+          .pwc-blue { color: #3498db; }
+          .pwc-orange { color: #e67e22; }
+          
+          /* 로딩 스피너 */
+          .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #f3f3f3; border-top: 2px solid #3498db; border-radius: 50%; animation: spin 1s linear infinite; }
+          @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+          
+          /* 상태바 개선 */
+          .status-bar { backdrop-filter: blur(10px); animation: fadeInUp 0.8s ease-out; }
+          @keyframes fadeInUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
+          
+          /* 반응형 디자인 */
+          @media (max-width: 768px) {
+            .control-panel, .insight-panel { position: relative; top: auto; left: auto; right: auto; width: 100%; margin: 10px 0; max-height: none; }
+            .graph-container { height: 50vh; }
+          }
+        `}</style>
         
         <style>{`
           body {

@@ -19,5 +19,5 @@ RUN npm prune --production
 # Expose port
 EXPOSE 3000
 
-# Start command for Railway
-CMD ["npm", "run", "start:railway"]
+# Start command for Railway - use simple server
+CMD ["node", "simple-server.js"]
