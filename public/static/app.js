@@ -24,11 +24,28 @@ function Graph3D({ nodes, links, onNodeClick, highlightPath }) {
   const getNormalizedPosition = (node) => {
     const centerX = canvasSize.width / 2;
     const centerY = canvasSize.height / 2;
-    const scale = 2; // 노드 간격 조정
+    
+    // 노드가 x, y 좌표를 가지고 있지 않다면 자동으로 배치
+    if (!node.x && !node.y) {
+      const index = nodes.findIndex(n => n.id === node.id);
+      const totalNodes = nodes.length;
+      const radius = Math.min(canvasSize.width, canvasSize.height) * 0.3;
+      const angle = (index * 2 * Math.PI) / totalNodes;
+      
+      return {
+        x: centerX + Math.cos(angle) * radius,
+        y: centerY + Math.sin(angle) * radius
+      };
+    }
+    
+    // 기존 좌표가 있다면 화면 중앙 기준으로 스케일링
+    const scale = Math.min(canvasSize.width, canvasSize.height) / 800; // 동적 스케일
+    const offsetX = node.x || 0;
+    const offsetY = node.y || 0;
     
     return {
-      x: centerX + (node.x - 150) * scale,
-      y: centerY + (node.y - 75) * scale
+      x: centerX + offsetX * scale,
+      y: centerY + offsetY * scale
     };
   };
 
@@ -166,7 +183,7 @@ function Graph3D({ nodes, links, onNodeClick, highlightPath }) {
   // 메인 렌더링 루프
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || !nodes.length || canvasSize.width === 0) return;
+    if (!canvas || canvasSize.width === 0) return;
     
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvasSize.width, canvasSize.height);
@@ -180,6 +197,17 @@ function Graph3D({ nodes, links, onNodeClick, highlightPath }) {
     gradient.addColorStop(1, '#16213e');
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, canvasSize.width, canvasSize.height);
+    
+    // 노드가 없을 때 안내 메시지 표시
+    if (!nodes.length) {
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 24px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText('그래프가 비어있습니다', canvasSize.width/2, canvasSize.height/2 - 40);
+      ctx.font = '16px Arial';
+      ctx.fillText('PDF를 업로드하거나 PwC 시드를 로드하세요', canvasSize.width/2, canvasSize.height/2 + 10);
+      return;
+    }
     
     // 노드 위치 저장
     const nodePositions = {};
