@@ -30,7 +30,6 @@
     "@types/react-dom": "^19.1.9",
     "@types/three": "^0.180.0",
     "axios": "^1.11.0",
-    "axios": "^1.11.0",
     "express": "^4.21.2",
     "hono": "^4.9.6",
     "openai": "^5.20.1"
@@ -40,11 +39,11 @@
   },
   "optionalDependencies": {
     "canvas": "^3.2.0",
-    "sharp": "^0.34.3",
     "pdf-lib": "^1.17.1",
     "pdf-parse": "^1.1.1",
     "pdf-poppler": "^0.2.1",
     "pdf2pic": "^3.2.0",
-    "pdfjs-dist": "^4.7.76"
+    "pdfjs-dist": "^4.10.38",
+    "sharp": "^0.34.3"
   }
 }

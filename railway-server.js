@@ -1,6 +1,6 @@
 // Railway 전용 완전 독립 서버 (Hono 의존성 제거)
 import { createServer } from 'http'
-import { readFileSync, existsSync, readdirSync, mkdirSync } from 'fs'
+import { readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync } from 'fs'
 import { join, extname, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import axios from 'axios'
@@ -873,25 +873,474 @@ function generateLottePDFProcessingResult(uploadData, startTime) {
   }
 }
 
-// Railway 호환 PDF 페이지 변환 함수 (더 안정적인 방법)
+// 실제 PDF 페이지를 이미지로 변환하는 함수
 async function convertPDFPageToImage(pdfUrl, pageNumber, documentTitle = '') {
   try {
-    console.log(`📄 PDF 페이지 ${pageNumber} 변환 시작: ${documentTitle}`)
+    console.log(`📄 실제 PDF 페이지 ${pageNumber} 변환 시작: ${documentTitle}`)
     
     // PDF 파일 다운로드
     const pdfBuffer = await downloadPDFFile(pdfUrl)
+    console.log(`📊 PDF 다운로드 성공 (${pdfBuffer.length} bytes)`)
     
-    // Railway 환경에서는 외부 라이브러리 의존성을 최소화하고
-    // 실제 PDF 처리 대신 향상된 fallback 이미지를 사용
-    console.log(`📊 PDF 다운로드 성공 (${pdfBuffer.length} bytes), fallback 이미지 사용`)
-    
-    // Railway에서 더 안정적인 fallback 방법 사용
-    return generateEnhancedPDFPreview(pageNumber, documentTitle, pdfBuffer.length)
+    // 실제 PDF → 이미지 변환 시도
+    return await convertRealPDFToImage(pdfBuffer, pageNumber, documentTitle)
     
   } catch (error) {
     console.error(`❌ PDF 페이지 ${pageNumber} 변환 실패:`, error.message)
+    console.log(`🔄 fallback 이미지 사용`)
     return generateFallbackPageImage(pageNumber, documentTitle)
   }
+}
+
+// 실제 PDF 버퍼를 이미지로 변환하는 함수
+async function convertRealPDFToImage(pdfBuffer, pageNumber, documentTitle = '') {
+  const { execSync } = await import('child_process')
+  const { writeFileSync, readFileSync, unlinkSync } = await import('fs')
+  const { join } = await import('path')
+  
+  try {
+    console.log(`🎨 실제 PDF 페이지 ${pageNumber} 이미지 변환 중... (${pdfBuffer.length} bytes)`)
+    
+    // 임시 파일 경로
+    const tempDir = './temp'
+    const tempPdfPath = join(tempDir, `temp_pdf_${Date.now()}_${pageNumber}.pdf`)
+    const tempImagePath = join(tempDir, `temp_image_${Date.now()}_${pageNumber}.png`)
+    
+    // PDF 버퍼를 임시 파일로 저장
+    writeFileSync(tempPdfPath, pdfBuffer)
+    console.log(`💾 임시 PDF 파일 생성: ${tempPdfPath}`)
+    
+    try {
+      // ImageMagick을 사용해서 PDF 페이지를 PNG로 변환
+      // [pageNumber-1] : 0-based 인덱스
+      const convertCommand = `convert "${tempPdfPath}[${pageNumber - 1}]" -density 150 -quality 90 "${tempImagePath}"`
+      console.log(`⚙️ ImageMagick 명령 실행: ${convertCommand}`)
+      
+      execSync(convertCommand, { timeout: 30000 })
+      
+      // 변환된 이미지 파일 읽기
+      const imageBuffer = readFileSync(tempImagePath)
+      console.log(`✅ 이미지 변환 성공: ${imageBuffer.length} bytes`)
+      
+      // Base64로 인코딩
+      const base64Image = imageBuffer.toString('base64')
+      const dataUrl = `data:image/png;base64,${base64Image}`
+      
+      // 임시 파일 정리
+      unlinkSync(tempPdfPath)
+      unlinkSync(tempImagePath)
+      
+      return {
+        success: true,
+        method: 'real-pdf-conversion',
+        pageNumber: pageNumber,
+        imageData: dataUrl,
+        imageSize: imageBuffer.length,
+        width: 800,
+        height: 1100,
+        documentTitle: documentTitle
+      }
+      
+    } catch (convertError) {
+      console.error(`❌ ImageMagick 변환 실패:`, convertError.message)
+      
+      // 임시 파일 정리
+      try { unlinkSync(tempPdfPath) } catch {}
+      try { unlinkSync(tempImagePath) } catch {}
+      
+      throw convertError
+    }
+    
+  } catch (error) {
+    console.error(`❌ 실제 PDF 변환 실패:`, error.message)
+    throw error
+  }
+}
+
+// 실제 파일 업로드 처리 함수 (multipart/form-data)
+async function handleFileUpload(req) {
+  return new Promise((resolve, reject) => {
+    try {
+      const chunks = []
+      const contentType = req.headers['content-type'] || ''
+      const boundary = contentType.split('boundary=')[1]
+      
+      if (!boundary) {
+        return resolve({ success: false, error: 'No boundary found' })
+      }
+      
+      req.on('data', chunk => chunks.push(chunk))
+      req.on('end', () => {
+        try {
+          const buffer = Buffer.concat(chunks)
+          const boundaryBuffer = Buffer.from(`--${boundary}`)
+          
+          // multipart 데이터 파싱
+          const parts = []
+          let start = 0
+          
+          while (true) {
+            const boundaryIndex = buffer.indexOf(boundaryBuffer, start)
+            if (boundaryIndex === -1) break
+            
+            if (start !== 0) {
+              parts.push(buffer.slice(start, boundaryIndex))
+            }
+            start = boundaryIndex + boundaryBuffer.length
+          }
+          
+          // 파일 파트 찾기
+          for (const part of parts) {
+            const headerEnd = part.indexOf('\r\n\r\n')
+            if (headerEnd === -1) continue
+            
+            const headerStr = part.slice(0, headerEnd).toString()
+            const fileData = part.slice(headerEnd + 4)
+            
+            if (headerStr.includes('filename=')) {
+              // 파일명 추출
+              const filenameMatch = headerStr.match(/filename="([^"]+)"/)
+              const fileName = filenameMatch ? filenameMatch[1] : 'uploaded_file.pdf'
+              
+              // Content-Type 추출
+              const contentTypeMatch = headerStr.match(/Content-Type:\s*([^\r\n]+)/)
+              const contentType = contentTypeMatch ? contentTypeMatch[1] : 'application/pdf'
+              
+              // 파일 저장
+              const timestamp = Date.now()
+              const tempFileName = `temp_${timestamp}.pdf`
+              const filePath = `./temp/${tempFileName}`
+              
+              writeFileSync(filePath, fileData)
+              
+              console.log(`💾 파일 저장 완료: ${filePath} (${fileData.length} bytes)`)
+              
+              return resolve({
+                success: true,
+                fileName: fileName,
+                filePath: filePath,
+                fileSize: fileData.length,
+                contentType: contentType
+              })
+            }
+          }
+          
+          resolve({ success: false, error: 'No file found in upload' })
+          
+        } catch (parseError) {
+          console.error('❌ 파일 업로드 파싱 실패:', parseError)
+          resolve({ success: false, error: parseError.message })
+        }
+      })
+      
+      req.on('error', (error) => {
+        console.error('❌ 파일 업로드 요청 실패:', error)
+        resolve({ success: false, error: error.message })
+      })
+      
+    } catch (error) {
+      console.error('❌ 파일 업로드 처리 실패:', error)
+      resolve({ success: false, error: error.message })
+    }
+  })
+}
+
+// 실제 업로드된 PDF 처리 함수
+async function processRealUploadedPDF(uploadData) {
+  console.log('📄 실제 업로드된 PDF 처리 시작...', uploadData.fileName)
+  
+  try {
+    // PDF 파일에서 텍스트 추출
+    const { readFileSync } = await import('fs')
+    const pdfBuffer = readFileSync(uploadData.fileUrl) // 로컬 파일 경로
+    
+    let pdfTextData = null
+    if (pdfParse) {
+      try {
+        console.log('📖 PDF 텍스트 추출 중...')
+        pdfTextData = await pdfParse(pdfBuffer)
+        console.log(`✅ PDF 텍스트 추출 성공: ${pdfTextData.numpages}페이지, ${pdfTextData.text.length}문자`)
+      } catch (parseError) {
+        console.warn('⚠️ PDF 텍스트 추출 실패:', parseError.message)
+      }
+    }
+    
+    const totalPages = pdfTextData?.numpages || Math.ceil(uploadData.fileSize / (200 * 1024)) // 추정
+    console.log(`📊 총 페이지 수: ${totalPages}`)
+    
+    // LLM 분석 시도
+    let allPDFPages = []
+    if (pdfTextData && pdfTextData.text.length > 0) {
+      console.log('🤖 LLM 분석 시작...')
+      console.log(`📊 전체 텍스트: ${pdfTextData.text.length} 문자, ${totalPages} 페이지`)
+      
+      const textPerPage = Math.ceil(pdfTextData.text.length / totalPages)
+      console.log(`📄 페이지당 예상 텍스트: ${textPerPage} 문자`)
+      
+      for (let i = 1; i <= Math.min(totalPages, 10); i++) { // 최대 10페이지까지 분석
+        const startIdx = (i - 1) * textPerPage
+        const endIdx = Math.min(i * textPerPage, pdfTextData.text.length)
+        const pageText = pdfTextData.text.substring(startIdx, endIdx).trim()
+        
+        console.log(`📄 페이지 ${i} 텍스트 추출:`)
+        console.log(`   시작 인덱스: ${startIdx}`)
+        console.log(`   종료 인덱스: ${endIdx}`)
+        console.log(`   추출된 텍스트 길이: ${pageText.length} 문자`)
+        console.log(`   텍스트 샘플 (처음 100자): "${pageText.substring(0, 100).replace(/\n/g, '\\n')}"`)
+        
+        if (pageText.length > 0) {
+          try {
+            console.log(`🤖 페이지 ${i} LLM 분석 중... (${pageText.length} 문자)`)
+            const analysis = await analyzePDFPageWithLLM(
+              pageText, 
+              i, 
+              uploadData.fileName,
+              pdfTextData.text.substring(0, 2000) // 전체 문서 맥락
+            )
+            
+            console.log(`✅ 페이지 ${i} LLM 분석 완료:`)
+            console.log(`   제목: ${analysis.title}`)
+            console.log(`   부제목: ${analysis.subtitle}`)
+            console.log(`   내용: ${analysis.content}`)
+            console.log(`   의도: ${analysis.intent}`)
+            console.log(`   핵심 메시지 수: ${analysis.keyMessages?.length || 0}`)
+            
+            const pageData = {
+              pageNumber: i,
+              title: analysis.title,
+              subtitle: analysis.subtitle,
+              content: analysis.content,
+              intent: analysis.intent,
+              headMessage: analysis.headMessage,
+              keyMessages: analysis.keyMessages || [],
+              actualContent: pageText.substring(0, 500)
+            }
+            
+            allPDFPages.push(pageData)
+            console.log(`📝 페이지 ${i} 데이터 추가됨`)
+            
+          } catch (llmError) {
+            console.warn(`⚠️ 페이지 ${i} LLM 분석 실패:`, llmError.message)
+            
+            // LLM 실패시 실제 텍스트 기반 분석 사용
+            console.warn(`⚠️ 페이지 ${i} LLM 분석 실패, 실제 텍스트 기반 분석 사용`)
+            const fallbackAnalysis = generateEnhancedFallbackPageAnalysis(pageText, i, uploadData.fileName)
+            const fallbackData = {
+              pageNumber: i,
+              title: fallbackAnalysis.title,
+              subtitle: fallbackAnalysis.subtitle,
+              content: fallbackAnalysis.content,
+              intent: fallbackAnalysis.intent,
+              headMessage: fallbackAnalysis.headMessage,
+              keyMessages: fallbackAnalysis.keyMessages,
+              actualContent: pageText.substring(0, 500)
+            }
+            
+            allPDFPages.push(fallbackData)
+            console.log(`📝 페이지 ${i} 폴백 데이터 추가됨`)
+          }
+        }
+      }
+      
+      console.log(`🤖 LLM 분석 완료: ${allPDFPages.length}개 페이지 처리됨`)
+    }
+    
+    // LLM 분석이 실패하면 실제 텍스트 기반 fallback 사용
+    if (allPDFPages.length === 0) {
+      console.log('⚠️ LLM 분석 실패, 실제 텍스트 기반 fallback 데이터 사용')
+      allPDFPages = generateEnhancedFallbackPDFPages(uploadData.fileName, totalPages, pdfTextData?.text || '')
+    }
+    
+    // 노드와 관계 생성 (기존 로직 사용)
+    const allNodes = []
+    const relationships = []
+    
+    // PDF 페이지 이미지 노드들 생성
+    console.log(`📊 노드 생성 시작: ${allPDFPages.length}개 페이지`)
+    for (let index = 0; index < allPDFPages.length; index++) {
+      const pageData = allPDFPages[index]
+      const angle = (index / allPDFPages.length) * 2 * Math.PI
+      
+      console.log(`📄 페이지 ${pageData.pageNumber} 노드 생성 중:`)
+      console.log(`   제목: ${pageData.title}`)
+      console.log(`   내용: ${pageData.content}`)
+      console.log(`   키 메시지 수: ${pageData.keyMessages?.length || 0}`)
+      console.log(`   실제 텍스트 길이: ${pageData.actualContent?.length || 0}문자`)
+      
+      // 실제 PDF 페이지 이미지 생성
+      let imageDataUrl = generateFallbackPageImage(pageData.pageNumber, uploadData.fileName).dataUrl
+      
+      try {
+        console.log(`🖼️ 실제 PDF 페이지 ${pageData.pageNumber} 변환 시도...`)
+        const realImageResult = await convertRealPDFToImage(pdfBuffer, pageData.pageNumber, uploadData.fileName)
+        if (realImageResult.success && realImageResult.imageData) {
+          imageDataUrl = realImageResult.imageData
+          console.log(`✅ 실제 PDF 페이지 ${pageData.pageNumber} 변환 성공 (${realImageResult.imageSize} bytes)`)
+          console.log(`   이미지 데이터 URL 길이: ${imageDataUrl.length} 문자`)
+        }
+      } catch (pdfError) {
+        console.warn(`⚠️ PDF 페이지 ${pageData.pageNumber} 변환 실패, fallback 사용:`, pdfError.message)
+      }
+      
+      // 페이지 노드 생성
+      const newNode = {
+        id: `pdf_page_${pageData.pageNumber}`,
+        type: 'pdf_page',
+        label: `${pageData.title}`,
+        group: 'pdf_pages',
+        x: 300 + Math.cos(angle) * 200,
+        y: 300 + Math.sin(angle) * 200,
+        data: {
+          ...pageData,
+          imageUrl: imageDataUrl,
+          pdfUrl: uploadData.fileUrl // 로컬 파일 경로 추가
+        }
+      }
+      
+      console.log(`✅ 노드 생성 완료: ${newNode.id}`)
+      console.log(`   노드 라벨: ${newNode.label}`)
+      console.log(`   노드 위치: (${Math.round(newNode.x)}, ${Math.round(newNode.y)})`)
+      console.log(`   데이터 키 수: ${Object.keys(newNode.data).length}`)
+      
+      allNodes.push(newNode)
+    }
+    
+    console.log(`📊 총 노드 생성 완료: ${allNodes.length}개`)
+    
+    // 관계(엣지) 생성 로그 추가
+    console.log(`🔗 엣지 생성 시작: ${relationships.length}개 기존 관계`)
+    
+    // 페이지 간 순차 관계 생성 (예시)
+    for (let i = 0; i < allPDFPages.length - 1; i++) {
+      const sourcePageId = `pdf_page_${allPDFPages[i].pageNumber}`
+      const targetPageId = `pdf_page_${allPDFPages[i + 1].pageNumber}`
+      
+      const newEdge = {
+        id: `edge_${sourcePageId}_${targetPageId}`,
+        source: sourcePageId,
+        target: targetPageId,
+        type: 'sequence',
+        label: `페이지 ${allPDFPages[i].pageNumber} → ${allPDFPages[i + 1].pageNumber}`,
+        data: {
+          relationship: 'sequential',
+          weight: 1
+        }
+      }
+      
+      console.log(`🔗 엣지 생성: ${sourcePageId} → ${targetPageId}`)
+      relationships.push(newEdge)
+    }
+    
+    console.log(`🔗 총 엣지 생성 완료: ${relationships.length}개`)
+    
+    const result = {
+      success: true,
+      message: `📄 실제 PDF 처리 완료: ${uploadData.fileName}`,
+      processingMode: 'real_uploaded_pdf',
+      processedDocument: {
+        filename: uploadData.fileName,
+        totalPages: totalPages,
+        documentType: 'Uploaded PDF Document',
+        filePath: uploadData.fileUrl
+      },
+      newNodes: allNodes,
+      newLinks: relationships
+    }
+    
+    console.log(`🎉 최종 처리 결과:`)
+    console.log(`   성공: ${result.success}`)
+    console.log(`   처리 모드: ${result.processingMode}`)
+    console.log(`   파일명: ${result.processedDocument.filename}`)
+    console.log(`   총 페이지: ${result.processedDocument.totalPages}`)
+    console.log(`   생성된 노드 수: ${result.newNodes.length}`)
+    console.log(`   생성된 엣지 수: ${result.newLinks.length}`)
+    
+    // 노드 데이터 샘플 출력
+    if (result.newNodes.length > 0) {
+      console.log(`📊 첫 번째 노드 샘플:`)
+      const firstNode = result.newNodes[0]
+      console.log(`   ID: ${firstNode.id}`)
+      console.log(`   타입: ${firstNode.type}`)
+      console.log(`   라벨: ${firstNode.label}`)
+      console.log(`   그룹: ${firstNode.group}`)
+      console.log(`   데이터 키들: ${Object.keys(firstNode.data).join(', ')}`)
+      console.log(`   이미지 URL 길이: ${firstNode.data.imageUrl?.length || 0} 문자`)
+      console.log(`   실제 내용 길이: ${firstNode.data.actualContent?.length || 0} 문자`)
+    }
+    
+    // 엣지 데이터 샘플 출력
+    if (result.newLinks.length > 0) {
+      console.log(`🔗 첫 번째 엣지 샘플:`)
+      const firstEdge = result.newLinks[0]
+      console.log(`   ID: ${firstEdge.id}`)
+      console.log(`   소스: ${firstEdge.source}`)
+      console.log(`   타겟: ${firstEdge.target}`)
+      console.log(`   타입: ${firstEdge.type}`)
+      console.log(`   라벨: ${firstEdge.label}`)
+    }
+    
+    return result
+    
+  } catch (error) {
+    console.error('❌ 실제 PDF 처리 실패:', error)
+    
+    // 실패 시 기본 처리
+    return generateMockPDFProcessingResult(uploadData)
+  }
+}
+
+// 향상된 Fallback PDF 페이지 생성 함수 (실제 텍스트 기반)
+function generateEnhancedFallbackPDFPages(fileName, totalPages = 10, fullText = '') {
+  console.log(`📄 향상된 fallback PDF 페이지 생성: ${totalPages}페이지, 전체 텍스트 ${fullText.length}문자`)
+  
+  const pages = []
+  
+  // 전체 텍스트를 페이지 수로 나누어 배분
+  const textPerPage = Math.ceil(fullText.length / totalPages)
+  
+  for (let i = 1; i <= totalPages; i++) {
+    // 해당 페이지의 텍스트 추출
+    const startIdx = (i - 1) * textPerPage
+    const endIdx = Math.min(i * textPerPage, fullText.length)
+    const pageText = fullText.substring(startIdx, endIdx).trim()
+    
+    console.log(`📄 페이지 ${i} fallback 생성: ${pageText.length}문자`)
+    
+    // 실제 텍스트가 있으면 분석, 없으면 기본값 사용
+    if (pageText.length > 20) {
+      const analysis = generateEnhancedFallbackPageAnalysis(pageText, i, fileName)
+      pages.push({
+        pageNumber: i,
+        title: analysis.title,
+        subtitle: analysis.subtitle,
+        content: analysis.content,
+        intent: analysis.intent,
+        headMessage: analysis.headMessage,
+        keyMessages: analysis.keyMessages,
+        actualContent: pageText.substring(0, 500)
+      })
+    } else {
+      // 텍스트가 부족한 경우 기본 템플릿 사용
+      pages.push({
+        pageNumber: i,
+        title: `${fileName} - 페이지 ${i}`,
+        subtitle: `문서 페이지 ${i}`,
+        content: `페이지 ${i}의 내용입니다.`,
+        intent: 'inform',
+        headMessage: `페이지 ${i} 요약`,
+        keyMessages: [`페이지 ${i} 핵심 포인트`, '문서 분석 결과', '주요 내용'],
+        actualContent: `페이지 ${i} 텍스트 내용...`
+      })
+    }
+  }
+  
+  console.log(`✅ ${pages.length}개 향상된 fallback 페이지 생성 완료`)
+  return pages
+}
+
+// 기존 fallback 함수도 유지 (호환성)
+function generateFallbackPDFPages(fileName, totalPages = 10) {
+  return generateEnhancedFallbackPDFPages(fileName, totalPages, '')
 }
 
 // 향상된 PDF 미리보기 생성 (실제 PDF 정보 기반)
@@ -1110,11 +1559,13 @@ Part 02. 컨설팅 중간 결과 보고
 async function analyzePDFPageWithLLM(pageText, pageNumber, documentTitle, fullDocumentContext) {
   try {
     console.log(`🤖 LLM 페이지 ${pageNumber} 분석 시작...`)
+    console.log(`📝 실제 페이지 텍스트 길이: ${pageText.length} 문자`)
+    console.log(`📄 페이지 텍스트 샘플: "${pageText.substring(0, 200)}..."`)
     
-    // OpenAI API 키가 없으면 fallback 데이터 사용
+    // OpenAI API 키가 없으면 실제 텍스트 기반 fallback 분석 사용
     if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === 'sk-dummy-key-for-demo') {
-      console.log(`⚠️ OpenAI API 키 없음, fallback 데이터 사용`)
-      return generateFallbackPageAnalysis(pageText, pageNumber, documentTitle)
+      console.log(`⚠️ OpenAI API 키 없음, 실제 텍스트 기반 fallback 분석 사용`)
+      return generateEnhancedFallbackPageAnalysis(pageText, pageNumber, documentTitle)
     }
 
     const prompt = `
@@ -1174,63 +1625,155 @@ ${fullDocumentContext.substring(0, 1000)}
       return analysis
     } catch (parseError) {
       console.error(`❌ LLM JSON 파싱 실패:`, parseError.message)
-      return generateFallbackPageAnalysis(pageText, pageNumber, documentTitle)
+      return generateEnhancedFallbackPageAnalysis(pageText, pageNumber, documentTitle)
     }
 
   } catch (error) {
     console.error(`❌ LLM 분석 실패:`, error.message)
-    return generateFallbackPageAnalysis(pageText, pageNumber, documentTitle)
+    return generateEnhancedFallbackPageAnalysis(pageText, pageNumber, documentTitle)
   }
 }
 
-// LLM 실패 시 fallback 페이지 분석
-function generateFallbackPageAnalysis(pageText, pageNumber, documentTitle) {
-  console.log(`📝 Fallback 분석 생성: 페이지 ${pageNumber}`)
+// 향상된 fallback 페이지 분석 (실제 텍스트 기반)
+function generateEnhancedFallbackPageAnalysis(pageText, pageNumber, documentTitle) {
+  console.log(`📝 향상된 Fallback 분석 생성: 페이지 ${pageNumber}`)
+  console.log(`📄 분석할 텍스트 길이: ${pageText.length} 문자`)
   
-  // 텍스트에서 간단한 키워드 추출
+  // 실제 텍스트에서 의미있는 정보 추출
   const text = pageText.toLowerCase()
+  const originalText = pageText
+  
+  // 제목 추출 (첫 번째 줄이나 가장 짧은 줄에서)
+  const lines = originalText.split('\n').filter(line => line.trim().length > 0)
+  let extractedTitle = `페이지 ${pageNumber}`
+  
+  if (lines.length > 0) {
+    // 첫 번째 줄이 짧고 의미있어 보이면 제목으로 사용
+    const firstLine = lines[0].trim()
+    if (firstLine.length > 0 && firstLine.length < 100) {
+      extractedTitle = firstLine
+    } else {
+      // 가장 짧으면서 의미있는 줄 찾기
+      for (const line of lines.slice(0, 5)) { // 처음 5줄만 검사
+        const trimmed = line.trim()
+        if (trimmed.length > 5 && trimmed.length < 80 && !trimmed.includes('•') && !trimmed.includes('-')) {
+          extractedTitle = trimmed
+          break
+        }
+      }
+    }
+  }
+  
+  // 핵심 메시지 추출 (가장 긴 줄들에서)
+  const keyMessages = []
+  const meaningfulLines = lines
+    .filter(line => line.trim().length > 20)
+    .slice(0, 5) // 처음 5개 의미있는 줄
+    
+  for (let i = 0; i < Math.min(3, meaningfulLines.length); i++) {
+    const message = meaningfulLines[i].trim()
+    if (message.length > 0) {
+      keyMessages.push(message.length > 100 ? message.substring(0, 100) + '...' : message)
+    }
+  }
+  
+  // 기본 메시지가 없으면 텍스트 기반으로 생성
+  if (keyMessages.length === 0) {
+    keyMessages.push(
+      `페이지 ${pageNumber}에서 추출된 주요 내용`,
+      `${documentTitle}의 핵심 정보`,
+      '문서 내용 기반 분석 결과'
+    )
+  }
+  
+  // 실제 텍스트 기반 키워드 추출
   const aiKeywords = []
   const consultingInsights = []
   
-  // AI 관련 키워드 검출
-  if (text.includes('ai') || text.includes('인공지능')) aiKeywords.push('AI Technology')
-  if (text.includes('digital') || text.includes('디지털')) aiKeywords.push('Digital Transformation')
+  // AI 관련 키워드 검출 (더 포괄적으로)
+  if (text.includes('ai') || text.includes('인공지능') || text.includes('artificial intelligence')) aiKeywords.push('AI Technology')
+  if (text.includes('digital') || text.includes('디지털') || text.includes('dt')) aiKeywords.push('Digital Transformation')
   if (text.includes('data') || text.includes('데이터')) aiKeywords.push('Data Analytics')
   if (text.includes('automation') || text.includes('자동화')) aiKeywords.push('Process Automation')
+  if (text.includes('machine learning') || text.includes('ml') || text.includes('머신러닝')) aiKeywords.push('Machine Learning')
+  if (text.includes('generative') || text.includes('생성형') || text.includes('gen ai')) aiKeywords.push('Generative AI')
+  if (text.includes('scm') || text.includes('supply chain')) aiKeywords.push('SCM Optimization')
+  if (text.includes('plant') || text.includes('플랜트') || text.includes('공장')) aiKeywords.push('Smart Manufacturing')
   
-  // 컨설팅 키워드 검출
+  // 컨설팅 키워드 검출 (더 포괄적으로)  
   if (text.includes('strategy') || text.includes('전략')) consultingInsights.push('전략 수립')
-  if (text.includes('implementation') || text.includes('구현')) consultingInsights.push('구현 방안')
+  if (text.includes('implementation') || text.includes('구현') || text.includes('실행')) consultingInsights.push('구현 방안')
   if (text.includes('roadmap') || text.includes('로드맵')) consultingInsights.push('로드맵 계획')
+  if (text.includes('consulting') || text.includes('컨설팅')) consultingInsights.push('컨설팅 방법론')
+  if (text.includes('analysis') || text.includes('분석')) consultingInsights.push('현황 분석')
+  if (text.includes('recommendation') || text.includes('제안') || text.includes('권고')) consultingInsights.push('제안 사항')
+  if (text.includes('transformation') || text.includes('변화') || text.includes('혁신')) consultingInsights.push('변화 관리')
+  if (text.includes('performance') || text.includes('성과') || text.includes('효과')) consultingInsights.push('성과 관리')
   
-  // 기본값 설정
-  if (aiKeywords.length === 0) aiKeywords.push('Technology', 'Innovation', 'Digital')
-  if (consultingInsights.length === 0) consultingInsights.push('분석 결과', '제안 사항')
+  // 회사별 특화 키워드
+  if (documentTitle.includes('롯데케미칼') || documentTitle.includes('AIDT')) {
+    if (text.includes('chemical') || text.includes('케미칼')) aiKeywords.push('Chemical Industry AI')
+    if (text.includes('r&d') || text.includes('연구개발')) consultingInsights.push('R&D 혁신')
+    if (text.includes('excellence') || text.includes('우수성')) consultingInsights.push('운영 우수성')
+  }
+  
+  if (documentTitle.includes('삼성') || documentTitle.includes('samsung')) {
+    if (text.includes('dx') || text.includes('digital experience')) aiKeywords.push('Digital Experience')
+    if (text.includes('multi agent') || text.includes('멀티 에이전트')) aiKeywords.push('Multi Agent System')
+    if (text.includes('orchestrator') || text.includes('오케스트레이터')) aiKeywords.push('AI Orchestrator')
+  }
+  
+  // 기본값 설정 (실제 텍스트가 있는 경우에만)
+  if (aiKeywords.length === 0 && pageText.length > 50) {
+    aiKeywords.push('Technology Innovation', 'Digital Solution', 'Process Improvement')
+  }
+  if (consultingInsights.length === 0 && pageText.length > 50) {
+    consultingInsights.push('전문 분석', '실행 계획', '성과 관리')
+  }
+  
+  // 페이지 타입 추론
+  let pageType = 'content'
+  if (pageNumber === 1 || text.includes('cover') || text.includes('표지')) pageType = 'cover'
+  else if (pageNumber === 2 || text.includes('contents') || text.includes('목차') || text.includes('agenda')) pageType = 'toc'
+  else if (text.includes('summary') || text.includes('결론') || text.includes('요약')) pageType = 'summary'
+  
+  // 의도 추론
+  let intent = 'inform'
+  if (text.includes('제안') || text.includes('recommendation') || text.includes('should')) intent = 'persuade'
+  else if (text.includes('decision') || text.includes('결정') || text.includes('선택')) intent = 'decide'
+  
+  // 실제 텍스트 요약 (처음 500문자 또는 의미있는 부분)
+  let summary = pageText.length > 500 ? pageText.substring(0, 500) + '...' : pageText
+  if (summary.length < 50) {
+    summary = `${documentTitle} 페이지 ${pageNumber}의 내용을 포함하고 있는 중요한 문서 페이지입니다.`
+  }
 
   return {
-    title: `페이지 ${pageNumber} - ${documentTitle.includes('롯데케미칼') ? '롯데케미칼 문서' : '기업 문서'}`,
-    subtitle: `${pageNumber}페이지 내용`,
-    intent: pageNumber <= 2 ? 'inform' : pageNumber <= 10 ? 'persuade' : 'decide',
-    headMessage: `${pageNumber}페이지의 주요 내용과 핵심 메시지`,
-    keyMessages: [
-      `페이지 ${pageNumber}의 핵심 내용`,
-      '데이터 기반 분석 결과',
-      '실행 가능한 제안사항'
-    ],
-    extractedText: pageText.substring(0, 200) + '...',
+    title: extractedTitle,
+    subtitle: `${documentTitle} - 페이지 ${pageNumber}`,
+    content: summary, // 실제 추출된 텍스트 사용
+    intent: intent,
+    headMessage: keyMessages[0] || `페이지 ${pageNumber}의 핵심 내용`,
+    keyMessages: keyMessages,
+    extractedText: summary,
     aiKeywords: aiKeywords,
     consultingInsights: consultingInsights,
-    dataSource: ['문서 분석', '텍스트 추출'],
-    kpi: `페이지 ${pageNumber} 핵심 지표`,
-    risks: '구현 복잡성, 기술적 제약',
-    decisions: `페이지 ${pageNumber} 관련 의사결정`,
-    framework: 'PDF 텍스트 분석 프레임워크',
-    summary: `${documentTitle} ${pageNumber}페이지의 주요 내용을 담고 있는 페이지`,
-    pageType: pageNumber === 1 ? 'cover' : pageNumber === 2 ? 'toc' : 'content',
-    hasCharts: pageNumber >= 3,
-    hasTables: pageNumber >= 2,
-    confidence: 0.75
+    dataSource: ['실제 PDF 텍스트', '문서 분석'],
+    kpi: aiKeywords.length > 0 ? `${aiKeywords[0]} 관련 지표` : '문서 품질 지표',
+    risks: consultingInsights.length > 0 ? `${consultingInsights[0]} 관련 리스크` : '실행 복잡성',
+    decisions: `${extractedTitle} 관련 의사결정`,
+    framework: '실제 PDF 텍스트 분석',
+    summary: summary,
+    pageType: pageType,
+    hasCharts: text.includes('chart') || text.includes('그래프') || text.includes('도표'),
+    hasTables: text.includes('table') || text.includes('표') || text.includes('데이터'),
+    confidence: Math.min(0.95, 0.6 + (pageText.length / 1000) * 0.1) // 텍스트 길이에 따른 신뢰도
   }
+}
+
+// 기존 fallback 함수도 유지 (호환성)
+function generateFallbackPageAnalysis(pageText, pageNumber, documentTitle) {
+  return generateEnhancedFallbackPageAnalysis(pageText, pageNumber, documentTitle)
 }
 
 // Fallback SVG 이미지 생성 (PDF 변환 실패 시)
@@ -1965,13 +2508,17 @@ function generateFallbackPDFPages(fileName) {
     // 실제 PDF 페이지 이미지 URL 생성
     let imageDataUrl = generateFallbackPageImage(pageData.pageNumber, uploadData.fileName).dataUrl
     
-    // PDF URL이 있는 경우 실제 PDF 페이지 변환 시도 (첫 4페이지만 - 성능 고려)
-    if (hasPDFUrl && pageData.pageNumber <= 4) {
+    // PDF URL이 있는 경우 실제 PDF 페이지 변환 시도 (모든 페이지 - 실제 변환)
+    if (hasPDFUrl) {
       try {
         console.log(`🖼️ 실제 PDF 페이지 ${pageData.pageNumber} 변환 시도...`)
         const realImageResult = await convertPDFPageToImage(pdfUrl, pageData.pageNumber, uploadData.fileName)
-        imageDataUrl = realImageResult.dataUrl
-        console.log(`✅ 실제 PDF 페이지 ${pageData.pageNumber} 변환 성공`)
+        if (realImageResult.success && realImageResult.imageData) {
+          imageDataUrl = realImageResult.imageData
+          console.log(`✅ 실제 PDF 페이지 ${pageData.pageNumber} 변환 성공 (${realImageResult.imageSize} bytes)`)
+        } else {
+          console.warn(`⚠️ PDF 페이지 ${pageData.pageNumber} 변환 결과 없음, fallback 사용`)
+        }
       } catch (pdfError) {
         console.warn(`⚠️ PDF 페이지 ${pageData.pageNumber} 변환 실패, fallback 사용:`, pdfError.message)
       }
@@ -2298,11 +2845,19 @@ const server = createServer(async (req, res) => {
             
             let imageResult
             
-            // 실제 PDF URL이 있는 경우 실제 PDF 변환 시도
-            if (pdfUrl && pdfUrl.startsWith('http')) {
-              console.log(`🔄 실제 PDF 페이지 ${pageNumber} 변환 시도...`)
+            // 실제 PDF URL이 있거나 로컬 파일 경로가 있는 경우 실제 PDF 변환 시도
+            if (pdfUrl && (pdfUrl.startsWith('http') || pdfUrl.startsWith('./temp/'))) {
+              console.log(`🔄 실제 PDF 페이지 ${pageNumber} 변환 시도... (${pdfUrl})`)
               try {
-                imageResult = await convertPDFPageToImage(pdfUrl, pageNumber, documentTitle)
+                if (pdfUrl.startsWith('http')) {
+                  // HTTP URL 처리
+                  imageResult = await convertPDFPageToImage(pdfUrl, pageNumber, documentTitle)
+                } else {
+                  // 로컬 파일 경로 처리
+                  const { readFileSync } = await import('fs')
+                  const pdfBuffer = readFileSync(pdfUrl)
+                  imageResult = await convertRealPDFToImage(pdfBuffer, pageNumber, documentTitle)
+                }
                 console.log(`✅ 실제 PDF 페이지 ${pageNumber} 변환 성공`)
               } catch (pdfError) {
                 console.warn(`⚠️ 실제 PDF 변환 실패, fallback 사용:`, pdfError.message)
@@ -2361,53 +2916,99 @@ const server = createServer(async (req, res) => {
       }
     }
     
-    // 문서 업로드 API
+    // 문서 업로드 API (실제 파일 업로드 지원)
     if (url === '/api/documents/upload' && req.method === 'POST') {
       console.log('🎯 문서 업로드 요청')
       
       try {
-        // 요청 본문 읽기
-        let body = ''
-        req.on('data', chunk => { body += chunk })
-        req.on('end', async () => {
-          try {
-            const uploadData = JSON.parse(body)
-            console.log(`📄 업로드 파일: ${uploadData.fileName}`)
+        const contentType = req.headers['content-type'] || ''
+        
+        if (contentType.includes('multipart/form-data')) {
+          // 실제 파일 업로드 처리
+          console.log('📤 실제 파일 업로드 감지')
+          const uploadResult = await handleFileUpload(req)
+          
+          let processingResult
+          if (uploadResult.success) {
+            console.log(`📄 업로드된 파일: ${uploadResult.fileName} (${uploadResult.fileSize} bytes)`)
             
-            // 롯데케미칼 PDF인지 확인
-            const isLotteChemical = uploadData.fileName?.includes('롯데케미칼') || uploadData.fileName?.includes('AIDT')
+            // 업로드된 파일 데이터 생성
+            const uploadData = {
+              fileName: uploadResult.fileName,
+              fileSize: uploadResult.fileSize,
+              fileUrl: uploadResult.filePath, // 로컬 파일 경로
+              contentType: uploadResult.contentType
+            }
             
-            let processingResult
-            if (isLotteChemical && uploadData.fileUrl) {
-              // 실제 롯데케미칼 PDF 처리
-              console.log('🔍 실제 롯데케미칼 PDF 처리 시작...')
-              processingResult = await processLotteChemicalPDF(uploadData)
+            // PDF 파일 처리
+            if (uploadResult.fileName.toLowerCase().endsWith('.pdf')) {
+              // 실제 PDF 처리
+              console.log('🔍 실제 PDF 처리 시작...')
+              processingResult = await processRealUploadedPDF(uploadData)
             } else {
               // 기존 Mock 처리
               processingResult = generateMockPDFProcessingResult(uploadData)
             }
-            
-            // 생성된 노드/링크를 런타임 데이터에 추가
-            mockNodes.push(...processingResult.newNodes)
-            mockLinks.push(...processingResult.newLinks)
-            
-            const responseData = JSON.stringify(processingResult)
-            res.writeHead(200, {
-              'Content-Type': 'application/json',
-              'Content-Length': Buffer.byteLength(responseData)
-            })
-            res.end(responseData)
-            console.log(`✅ 문서 업로드 처리 완료: ${processingResult.newNodes.length}개 노드, ${processingResult.newLinks.length}개 링크`)
-          } catch (parseError) {
-            console.error('❌ JSON 파싱 오류:', parseError)
-            const errorData = JSON.stringify({ success: false, error: 'Invalid JSON' })
-            res.writeHead(400, {
-              'Content-Type': 'application/json',
-              'Content-Length': Buffer.byteLength(errorData)
-            })
-            res.end(errorData)
+          } else {
+            throw new Error(`파일 업로드 실패: ${uploadResult.error}`)
           }
-        })
+          
+          // multipart 업로드 처리 완료
+          mockNodes.push(...processingResult.newNodes)
+          mockLinks.push(...processingResult.newLinks)
+          
+          const responseData = JSON.stringify(processingResult)
+          res.writeHead(200, {
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(responseData)
+          })
+          res.end(responseData)
+          console.log(`✅ 파일 업로드 처리 완료: ${processingResult.newNodes.length}개 노드, ${processingResult.newLinks.length}개 링크`)
+          
+        } else {
+          // JSON 데이터 처리 (기존 방식)
+          let body = ''
+          req.on('data', chunk => { body += chunk })
+          req.on('end', async () => {
+            try {
+              const uploadData = JSON.parse(body)
+              console.log(`📄 업로드 데이터: ${uploadData.fileName}`)
+              
+              // 롯데케미칼 PDF인지 확인
+              const isLotteChemical = uploadData.fileName?.includes('롯데케미칼') || uploadData.fileName?.includes('AIDT')
+              
+              let processingResult
+              if (isLotteChemical && uploadData.fileUrl) {
+                // 실제 롯데케미칼 PDF 처리
+                console.log('🔍 실제 롯데케미칼 PDF 처리 시작...')
+                processingResult = await processLotteChemicalPDF(uploadData)
+              } else {
+                // 기존 Mock 처리
+                processingResult = generateMockPDFProcessingResult(uploadData)
+              }
+            
+              // 생성된 노드/링크를 런타임 데이터에 추가
+              mockNodes.push(...processingResult.newNodes)
+              mockLinks.push(...processingResult.newLinks)
+              
+              const responseData = JSON.stringify(processingResult)
+              res.writeHead(200, {
+                'Content-Type': 'application/json',
+                'Content-Length': Buffer.byteLength(responseData)
+              })
+              res.end(responseData)
+              console.log(`✅ 문서 업로드 처리 완료: ${processingResult.newNodes.length}개 노드, ${processingResult.newLinks.length}개 링크`)
+            } catch (parseError) {
+              console.error('❌ JSON 파싱 오류:', parseError)
+              const errorData = JSON.stringify({ success: false, error: 'Invalid JSON' })
+              res.writeHead(400, {
+                'Content-Type': 'application/json',
+                'Content-Length': Buffer.byteLength(errorData)
+              })
+              res.end(errorData)
+            }
+          })
+        }
       } catch (error) {
         console.error('❌ 문서 업로드 오류:', error)
         const errorData = JSON.stringify({ success: false, error: error.message })
