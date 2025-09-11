@@ -1,353 +1,504 @@
-// PwC 온톨로지 간단하고 명확한 2D 그래프 뷰어
+// PwC 온톨로지 3D 그래프 뷰어
 const { useState, useEffect, useRef } = React;
 
-// 간단한 2D 그래프 컴포넌트
+// 3D Graph Component
 function Graph3D({ nodes, links, onNodeClick, highlightPath }) {
-  const canvasRef = useRef(null);
-  const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
-  const [hoveredNode, setHoveredNode] = useState(null);
+  const mountRef = useRef(null);
+  const sceneRef = useRef(null);
+  const rendererRef = useRef(null);
+  const cameraRef = useRef(null);
+  const groupRef = useRef(null);
+  const nodeObjectsRef = useRef(new Map());
 
-  // 캔버스 크기 설정
   useEffect(() => {
-    const updateSize = () => {
-      setCanvasSize({
-        width: window.innerWidth,
-        height: window.innerHeight
-      });
+    if (!mountRef.current) return;
+
+    // Scene setup
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setClearColor(0x000000, 0);
+    mountRef.current.appendChild(renderer.domElement);
+
+    // 향상된 조명 시스템
+    const ambientLight = new THREE.AmbientLight(0x404040, 0.4);
+    scene.add(ambientLight);
+    
+    // 메인 직사광
+    const mainLight = new THREE.DirectionalLight(0xffffff, 1.0);
+    mainLight.position.set(50, 100, 50);
+    mainLight.castShadow = true;
+    scene.add(mainLight);
+    
+    // 보조광 1
+    const fillLight = new THREE.DirectionalLight(0xffffff, 0.6);
+    fillLight.position.set(-50, 50, -50);
+    scene.add(fillLight);
+    
+    // 보조광 2 (색감 추가)
+    const colorLight = new THREE.DirectionalLight(0xe31e24, 0.3);
+    colorLight.position.set(0, -50, 100);
+    scene.add(colorLight);
+    
+    // 포인트 라이트 (롯데 브랜드 컴러)
+    const pointLight = new THREE.PointLight(0xe31e24, 0.8, 1000);
+    pointLight.position.set(0, 200, 200);
+    scene.add(pointLight);
+
+    // Controls for orbit - 카메라를 적당히 멀리 배치
+    camera.position.set(0, 0, 900);
+
+    // Group for all graph elements
+    const group = new THREE.Group();
+    scene.add(group);
+
+    // Store references
+    sceneRef.current = scene;
+    rendererRef.current = renderer;
+    cameraRef.current = camera;
+    groupRef.current = group;
+
+    // Mouse controls
+    let isMouseDown = false;
+    let mouseX = 0, mouseY = 0;
+
+    const onMouseDown = (event) => {
+      isMouseDown = true;
+      mouseX = event.clientX;
+      mouseY = event.clientY;
     };
-    updateSize();
-    window.addEventListener('resize', updateSize);
-    return () => window.removeEventListener('resize', updateSize);
+
+    const onMouseMove = (event) => {
+      if (!isMouseDown) return;
+      
+      const deltaX = event.clientX - mouseX;
+      const deltaY = event.clientY - mouseY;
+      
+      group.rotation.y += deltaX * 0.01;
+      group.rotation.x += deltaY * 0.01;
+      
+      mouseX = event.clientX;
+      mouseY = event.clientY;
+    };
+
+    const onMouseUp = (event) => {
+      if (isMouseDown) {
+        isMouseDown = false;
+        return;
+      }
+      
+      // Handle node clicks
+      const mouse = new THREE.Vector2();
+      mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+      mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+      const raycaster = new THREE.Raycaster();
+      raycaster.setFromCamera(mouse, camera);
+      
+      const intersects = raycaster.intersectObjects(group.children);
+      if (intersects.length > 0) {
+        const clickedObject = intersects[0].object;
+        if (clickedObject.userData.onClick) {
+          clickedObject.userData.onClick();
+        }
+      }
+    };
+
+    const onWheel = (event) => {
+      camera.position.z += event.deltaY * 0.4;
+      camera.position.z = Math.max(400, Math.min(2000, camera.position.z));
+    };
+
+    renderer.domElement.addEventListener('mousedown', onMouseDown);
+    renderer.domElement.addEventListener('mousemove', onMouseMove);
+    renderer.domElement.addEventListener('mouseup', onMouseUp);
+    renderer.domElement.addEventListener('wheel', onWheel);
+
+    // Animation loop
+    const animate = () => {
+      requestAnimationFrame(animate);
+      
+      // Rotate the entire group slowly for dynamic effect
+      group.rotation.y += 0.002;
+      
+      renderer.render(scene, camera);
+    };
+    animate();
+
+    // Handle window resize
+    const handleResize = () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    };
+    window.addEventListener('resize', handleResize);
+
+    // Cleanup
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      renderer.domElement.removeEventListener('mousedown', onMouseDown);
+      renderer.domElement.removeEventListener('mousemove', onMouseMove);
+      renderer.domElement.removeEventListener('mouseup', onMouseUp);
+      renderer.domElement.removeEventListener('wheel', onWheel);
+      
+      if (mountRef.current && renderer.domElement) {
+        mountRef.current.removeChild(renderer.domElement);
+      }
+      renderer.dispose();
+    };
   }, []);
 
-  // 노드 위치 정규화 함수
-  const getNormalizedPosition = (node) => {
-    const centerX = canvasSize.width / 2;
-    const centerY = canvasSize.height / 2;
-    const scale = 2; // 노드 간격 조정
-    
-    return {
-      x: centerX + (node.x - 150) * scale,
-      y: centerY + (node.y - 75) * scale
-    };
-  };
-
-  // 노드 렌더링 함수
-  const drawNode = (ctx, node) => {
-    const pos = getNormalizedPosition(node);
-    const isHighlighted = highlightPath && highlightPath.includes(node.id);
-    const isHovered = hoveredNode === node.id;
-    
-    let size, color, shape;
-    
-    // 노드 타입별 설정
-    switch (node.type) {
-      case 'pdf_page_image':
-        size = 80; // 큰 사각형
-        color = '#ffffff';
-        shape = 'rect';
-        break;
-      case 'ai_keyword':
-        size = 35; // 중간 원형
-        color = '#e74c3c';
-        shape = 'circle';
-        break;
-      case 'consulting_insight':
-        size = 35; // 중간 원형
-        color = '#f39c12';
-        shape = 'circle';
-        break;
-      default:
-        size = 25; // 기본 원형
-        color = node.color || '#3498db';
-        shape = 'circle';
-    }
-    
-    // 하이라이트 효과
-    if (isHighlighted) {
-      ctx.shadowColor = '#00ff00';
-      ctx.shadowBlur = 20;
-      size *= 1.3;
-    } else if (isHovered) {
-      ctx.shadowColor = color;
-      ctx.shadowBlur = 15;
-      size *= 1.2;
-    } else {
-      ctx.shadowBlur = 0;
-    }
-    
-    ctx.fillStyle = color;
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 3;
-    
-    if (shape === 'rect') {
-      // PDF 페이지 노드 - 사각형 + 롯데케미칼 브랜딩
-      ctx.fillRect(pos.x - size/2, pos.y - size/2, size, size);
-      ctx.strokeStyle = '#e31e24';
-      ctx.lineWidth = 4;
-      ctx.strokeRect(pos.x - size/2, pos.y - size/2, size, size);
-      
-      // 롯데 브랜드 컬러 헤더
-      ctx.fillStyle = '#e31e24';
-      ctx.fillRect(pos.x - size/2, pos.y - size/2, size, size/4);
-      
-      // 페이지 번호 표시
-      ctx.fillStyle = '#000000';
-      ctx.font = 'bold 16px Arial';
-      ctx.textAlign = 'center';
-      ctx.shadowBlur = 0;
-      ctx.fillText(`P${node.pageNumber || '?'}`, pos.x, pos.y + 5);
-      
-      // 상단 "LOTTE"
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 10px Arial';
-      ctx.fillText('LOTTE', pos.x, pos.y - size/2 + 12);
-    } else {
-      // 다른 노드들 - 원형
-      ctx.beginPath();
-      ctx.arc(pos.x, pos.y, size/2, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-      
-      // AI 키워드 특별 효과
-      if (node.type === 'ai_keyword') {
-        ctx.beginPath();
-        ctx.arc(pos.x, pos.y, size/2 - 3, 0, Math.PI * 2);
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-      }
-      
-      // 컨설팅 인사이트 특별 효과
-      if (node.type === 'consulting_insight') {
-        ctx.beginPath();
-        ctx.arc(pos.x, pos.y, size/2 - 3, 0, Math.PI * 2);
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-      }
-    }
-    
-    // 라벨 표시
-    ctx.shadowBlur = 0;
-    ctx.fillStyle = '#ffffff';
-    ctx.font = '12px Arial';
-    ctx.textAlign = 'center';
-    const label = node.label || node.id;
-    const shortLabel = label.length > 20 ? label.substring(0, 20) + '...' : label;
-    
-    // 라벨 배경
-    const textWidth = ctx.measureText(shortLabel).width;
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-    ctx.fillRect(pos.x - textWidth/2 - 4, pos.y + size/2 + 8, textWidth + 8, 16);
-    
-    // 라벨 텍스트
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText(shortLabel, pos.x, pos.y + size/2 + 20);
-    
-    return { x: pos.x, y: pos.y, size };
-  };
-
-  // 링크 렌더링 함수
-  const drawLink = (ctx, link, nodePositions) => {
-    const source = nodePositions[link.source];
-    const target = nodePositions[link.target];
-    
-    if (!source || !target) return;
-    
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(source.x, source.y);
-    ctx.lineTo(target.x, target.y);
-    ctx.stroke();
-  };
-
-  // 메인 렌더링 루프
+  // Update graph when nodes/links change
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || !nodes.length || canvasSize.width === 0) return;
-    
-    const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, canvasSize.width, canvasSize.height);
-    
-    // 배경 그라데이션
-    const gradient = ctx.createRadialGradient(
-      canvasSize.width/2, canvasSize.height/2, 0,
-      canvasSize.width/2, canvasSize.height/2, Math.max(canvasSize.width, canvasSize.height)/2
-    );
-    gradient.addColorStop(0, '#1a1a2e');
-    gradient.addColorStop(1, '#16213e');
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, canvasSize.width, canvasSize.height);
-    
-    // 노드 위치 저장
-    const nodePositions = {};
-    
-    // 링크 먼저 그리기 (노드 아래에)
+    if (!groupRef.current || !nodes.length) return;
+
+    // Clear existing objects
+    while (groupRef.current.children.length > 0) {
+      groupRef.current.remove(groupRef.current.children[0]);
+    }
+    nodeObjectsRef.current.clear();
+
+    // Create nodes
+    nodes.forEach(node => {
+      let geometry;
+      let material;
+      
+      // PDF 페이지 이미지 노드 특별 처리 - 시각성 강화
+      if (node.type === 'pdf_page_image' && node.imageDataUrl) {
+        // 더 큰 크기로 잘 보이도록 조정
+        const aspectRatio = node.aspectRatio || 1.0;
+        const width = 80;  // 40 → 80 (2배 확대)
+        const height = width / aspectRatio;
+        
+        // 입체감 있는 박스 지오메트리로 변경
+        geometry = new THREE.BoxGeometry(width, height, 8);
+        
+        // 고대비 텍스처 생성
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = 512;
+        canvas.height = 512 / aspectRatio;
+        
+        // 배경 그리데이션 (롯데케미칼 브랜드 컴러)
+        const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        gradient.addColorStop(0, '#e31e24');  // 롯데 빨간
+        gradient.addColorStop(0.3, '#ffffff'); // 하얀
+        gradient.addColorStop(1, '#f8f9fa');  // 연한 회색
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // 테두리 강화
+        ctx.strokeStyle = '#e31e24';
+        ctx.lineWidth = 6;
+        ctx.strokeRect(0, 0, canvas.width, canvas.height);
+        
+        // 타이틀 영역
+        ctx.fillStyle = '#e31e24';
+        ctx.fillRect(10, 10, canvas.width - 20, 60);
+        
+        // 롯데케미칼 로고
+        ctx.fillStyle = 'white';
+        ctx.font = 'bold 24px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('롯데케미칼 AI/DT', canvas.width/2, 45);
+        
+        // 페이지 번호
+        ctx.fillStyle = '#2c3e50';
+        ctx.font = 'bold 48px Arial';
+        ctx.fillText(`페이지 ${node.pageNumber}`, canvas.width/2, canvas.height/2);
+        
+        // 서브 타이틀
+        ctx.fillStyle = '#666';
+        ctx.font = '18px Arial';
+        const title = node.metadata?.title || node.label;
+        const maxWidth = canvas.width - 40;
+        ctx.fillText(title.length > 30 ? title.substring(0, 30) + '...' : title, canvas.width/2, canvas.height/2 + 60);
+        
+        // 바닥 정보
+        ctx.fillStyle = '#999';
+        ctx.font = '14px Arial';
+        ctx.fillText('현장 중심 AI/DT 로드맵', canvas.width/2, canvas.height - 30);
+        
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.minFilter = THREE.LinearFilter;
+        texture.magFilter = THREE.LinearFilter;
+        
+        material = new THREE.MeshLambertMaterial({ 
+          map: texture,
+          transparent: false,
+          opacity: 1.0
+        });
+      } else {
+        // 기존 노드 타입별 지오메트리 - 크기 확대 및 시각적 개선
+        switch (node.type) {
+          case 'ai_keyword':
+            // AI 키워드 - 빨간색 다이아몬드 모양
+            geometry = new THREE.OctahedronGeometry(15);
+            break;
+          case 'consulting_insight':
+            // 컨설팅 인사이트 - 주황색 육각형
+            geometry = new THREE.CylinderGeometry(12, 12, 20);
+            break;
+          case 'organization':
+            geometry = new THREE.OctahedronGeometry(12);
+            break;
+          case 'service':
+            geometry = new THREE.BoxGeometry(16, 16, 16);
+            break;
+          case 'capability':
+            geometry = new THREE.CylinderGeometry(10, 10, 18);
+            break;
+          case 'technology':
+            geometry = new THREE.TetrahedronGeometry(14);
+            break;
+          case 'deliverable':
+            geometry = new THREE.SphereGeometry(12);
+            break;
+          case 'pdf_page':
+            // 기존 PDF 페이지 노드 (텍스트 기반)
+            geometry = new THREE.BoxGeometry(30, 22, 4);
+            break;
+          default:
+            geometry = new THREE.SphereGeometry(10);
+        }
+
+        // 노드 타입별 매테리얼 최적화
+        if (node.type === 'ai_keyword') {
+          material = new THREE.MeshPhongMaterial({ 
+            color: node.color || '#e74c3c',
+            transparent: true,
+            opacity: 0.9,
+            shininess: 100,
+            emissive: new THREE.Color('#330000')
+          });
+        } else if (node.type === 'consulting_insight') {
+          material = new THREE.MeshPhongMaterial({ 
+            color: node.color || '#f39c12',
+            transparent: true,
+            opacity: 0.9,
+            shininess: 80,
+            emissive: new THREE.Color('#331a00')
+          });
+        } else {
+          material = new THREE.MeshLambertMaterial({ 
+            color: node.color,
+            transparent: true,
+            opacity: node.isNew ? 0.8 : 1.0
+          });
+        }
+      }
+      
+      const mesh = new THREE.Mesh(geometry, material);
+      // 노드 간격을 적당히 넓히기 위해 스케일을 5배로 조정
+      mesh.position.set((node.x - 150) * 5, (node.y - 75) * 5, (node.z || 0) * 3);
+      mesh.userData = { node };
+
+      // Add click handler for PDF page nodes (both types)
+      if (node.type === 'pdf_page' || node.type === 'pdf_page_image') {
+        mesh.userData.onClick = () => {
+          if (onNodeClick) {
+            onNodeClick(node);
+          }
+        };
+      }
+
+      // PDF 이미지 노드에 강화된 이팩트 추가
+      if (node.type === 'pdf_page_image') {
+        // 밝은 테두리 글로우
+        const edgeGeometry = new THREE.EdgesGeometry(geometry);
+        const edgeMaterial = new THREE.LineBasicMaterial({ 
+          color: '#e31e24', 
+          linewidth: 3,
+          transparent: true,
+          opacity: 0.8
+        });
+        const edgeMesh = new THREE.LineSegments(edgeGeometry, edgeMaterial);
+        mesh.add(edgeMesh);
+        
+        // 파티클 이팩트
+        const particleGeometry = new THREE.SphereGeometry(1, 8, 8);
+        const particleMaterial = new THREE.MeshBasicMaterial({ 
+          color: '#e31e24',
+          transparent: true,
+          opacity: 0.6
+        });
+        
+        for (let i = 0; i < 8; i++) {
+          const particle = new THREE.Mesh(particleGeometry, particleMaterial);
+          const angle = (i / 8) * Math.PI * 2;
+          const radius = 50;
+          particle.position.set(
+            Math.cos(angle) * radius,
+            Math.sin(angle) * radius,
+            (Math.random() - 0.5) * 20
+          );
+          mesh.add(particle);
+        }
+      }
+      
+      // Add glow effect for new nodes (AI 키워드, 컨설팅 인사이트)
+      if (node.isNew && node.type !== 'pdf_page_image') {
+        const glowGeometry = geometry.clone();
+        const glowMaterial = new THREE.MeshBasicMaterial({
+          color: node.color || '#ffffff',
+          transparent: true,
+          opacity: 0.3
+        });
+        const glowMesh = new THREE.Mesh(glowGeometry, glowMaterial);
+        glowMesh.scale.multiplyScalar(1.2);
+        mesh.add(glowMesh);
+
+        // Pulsing animation for new nodes
+        const pulseAnimation = () => {
+          const time = Date.now() * 0.005;
+          glowMesh.scale.setScalar(1.2 + Math.sin(time) * 0.1);
+          if (material.opacity !== undefined) {
+            material.opacity = 0.8 + Math.sin(time) * 0.2;
+          }
+        };
+        mesh.userData.animate = pulseAnimation;
+      }
+
+      groupRef.current.add(mesh);
+      nodeObjectsRef.current.set(node.id, mesh);
+
+      // 향상된 텍스트 라벨 (더 크고 선명하게)
+      if (node.type === 'pdf_page_image') {
+        // PDF 이미지 노드는 3D 라벨 사용
+        const labelCanvas = document.createElement('canvas');
+        const labelCtx = labelCanvas.getContext('2d');
+        labelCanvas.width = 400;
+        labelCanvas.height = 100;
+        
+        // 그리데이션 배경
+        const labelGradient = labelCtx.createLinearGradient(0, 0, 0, labelCanvas.height);
+        labelGradient.addColorStop(0, 'rgba(227, 30, 36, 0.9)');
+        labelGradient.addColorStop(1, 'rgba(227, 30, 36, 0.7)');
+        labelCtx.fillStyle = labelGradient;
+        labelCtx.fillRect(0, 0, labelCanvas.width, labelCanvas.height);
+        
+        // 테두리
+        labelCtx.strokeStyle = '#e31e24';
+        labelCtx.lineWidth = 3;
+        labelCtx.strokeRect(0, 0, labelCanvas.width, labelCanvas.height);
+        
+        // 텍스트
+        labelCtx.fillStyle = 'white';
+        labelCtx.font = 'bold 24px Arial';
+        labelCtx.textAlign = 'center';
+        labelCtx.shadowColor = 'rgba(0,0,0,0.5)';
+        labelCtx.shadowBlur = 3;
+        labelCtx.fillText(`PAGE ${node.pageNumber}`, labelCanvas.width / 2, 35);
+        
+        labelCtx.font = '16px Arial';
+        const title = node.metadata?.title || node.label;
+        const shortTitle = title.length > 25 ? title.substring(0, 25) + '...' : title;
+        labelCtx.fillText(shortTitle, labelCanvas.width / 2, 65);
+        
+        const labelTexture = new THREE.CanvasTexture(labelCanvas);
+        const labelSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: labelTexture }));
+        labelSprite.position.set(0, -60, 0);
+        labelSprite.scale.set(80, 20, 1);
+        mesh.add(labelSprite);
+      } else {
+        // 다른 노드 타입에 대한 기존 라벨
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        canvas.width = 256;
+        canvas.height = 64;
+        
+        context.fillStyle = 'rgba(0, 0, 0, 0.8)';
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        
+        context.fillStyle = 'white';
+        context.font = '16px Arial';
+        context.textAlign = 'center';
+        context.fillText(node.label, canvas.width / 2, canvas.height / 2 + 6);
+
+        const labelTexture = new THREE.CanvasTexture(canvas);
+        const spriteMaterial = new THREE.SpriteMaterial({ map: labelTexture });
+        const sprite = new THREE.Sprite(spriteMaterial);
+        sprite.position.set(0, 20, 0);
+        sprite.scale.set(40, 10, 1);
+        mesh.add(sprite);
+      }
+    });
+
+    // Create links
     links.forEach(link => {
       const sourceNode = nodes.find(n => n.id === link.source);
       const targetNode = nodes.find(n => n.id === link.target);
-      if (sourceNode && targetNode) {
-        drawLink(ctx, link, {
-          [link.source]: getNormalizedPosition(sourceNode),
-          [link.target]: getNormalizedPosition(targetNode)
+      
+      if (!sourceNode || !targetNode) return;
+
+      const geometry = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3((sourceNode.x - 150) * 5, (sourceNode.y - 75) * 5, (sourceNode.z || 0) * 3),
+        new THREE.Vector3((targetNode.x - 150) * 5, (targetNode.y - 75) * 5, (targetNode.z || 0) * 3)
+      ]);
+
+      const material = new THREE.LineBasicMaterial({ 
+        color: 0x555555,
+        transparent: true,
+        opacity: 0.6
+      });
+      
+      const line = new THREE.Line(geometry, material);
+      line.userData = { link };
+      groupRef.current.add(line);
+    });
+
+  }, [nodes, links]);
+
+  // Handle highlight path
+  useEffect(() => {
+    if (!highlightPath || !groupRef.current) return;
+
+    // Reset all materials
+    nodeObjectsRef.current.forEach(mesh => {
+      mesh.material.opacity = 0.3;
+    });
+
+    // Highlight path nodes
+    highlightPath.forEach(nodeId => {
+      const mesh = nodeObjectsRef.current.get(nodeId);
+      if (mesh) {
+        mesh.material.opacity = 1.0;
+        
+        // Add laser effect
+        const glowGeometry = mesh.geometry.clone();
+        const glowMaterial = new THREE.MeshBasicMaterial({
+          color: 0x00ff00,
+          transparent: true,
+          opacity: 0.5
         });
-      }
-    });
-    
-    // 노드 그리기
-    nodes.forEach(node => {
-      const nodeInfo = drawNode(ctx, node);
-      nodePositions[node.id] = nodeInfo;
-    });
-    
-    // 노드 클릭 이벤트 핸들러
-    const handleClick = (event) => {
-      const rect = canvas.getBoundingClientRect();
-      const x = event.clientX - rect.left;
-      const y = event.clientY - rect.top;
-      
-      // 클릭된 노드 찾기
-      for (const node of nodes) {
-        const pos = getNormalizedPosition(node);
-        const size = node.type === 'pdf_page_image' ? 80 : 35;
-        const distance = Math.sqrt((x - pos.x) ** 2 + (y - pos.y) ** 2);
-        
-        if (distance <= size/2) {
-          if (onNodeClick && (node.type === 'pdf_page' || node.type === 'pdf_page_image')) {
-            onNodeClick(node);
+        const glowMesh = new THREE.Mesh(glowGeometry, glowMaterial);
+        glowMesh.scale.multiplyScalar(1.3);
+        mesh.add(glowMesh);
+
+        // Remove glow after 3 seconds
+        setTimeout(() => {
+          if (mesh && glowMesh) {
+            mesh.remove(glowMesh);
           }
-          break;
-        }
+        }, 3000);
       }
-    };
-    
-    // 마우스 호버 이벤트 핸들러
-    const handleMouseMove = (event) => {
-      const rect = canvas.getBoundingClientRect();
-      const x = event.clientX - rect.left;
-      const y = event.clientY - rect.top;
-      
-      let foundHover = null;
-      for (const node of nodes) {
-        const pos = getNormalizedPosition(node);
-        const size = node.type === 'pdf_page_image' ? 80 : 35;
-        const distance = Math.sqrt((x - pos.x) ** 2 + (y - pos.y) ** 2);
-        
-        if (distance <= size/2) {
-          foundHover = node.id;
-          canvas.style.cursor = 'pointer';
-          break;
-        }
-      }
-      
-      if (!foundHover) {
-        canvas.style.cursor = 'default';
-      }
-      
-      if (foundHover !== hoveredNode) {
-        setHoveredNode(foundHover);
-      }
-    };
-    
-    canvas.addEventListener('click', handleClick);
-    canvas.addEventListener('mousemove', handleMouseMove);
-    
-    return () => {
-      canvas.removeEventListener('click', handleClick);
-      canvas.removeEventListener('mousemove', handleMouseMove);
-    };
-  }, [nodes, links, canvasSize, hoveredNode, highlightPath, onNodeClick]);
+    });
+
+    // Reset after 5 seconds
+    setTimeout(() => {
+      nodeObjectsRef.current.forEach(mesh => {
+        mesh.material.opacity = 1.0;
+      });
+    }, 5000);
+
+  }, [highlightPath]);
 
   return React.createElement('div', {
-    className: 'graph-container',
-    style: {
-      position: 'relative',
-      width: '100%',
-      height: '100vh',
-      overflow: 'hidden'
-    }
-  },
-    React.createElement('canvas', {
-      ref: canvasRef,
-      width: canvasSize.width,
-      height: canvasSize.height,
-      style: {
-        display: 'block',
-        width: '100%',
-        height: '100%'
-      }
-    }),
-    // 범례
-    React.createElement('div', {
-      className: 'legend',
-      style: {
-        position: 'absolute',
-        top: '20px',
-        right: '20px',
-        backgroundColor: 'rgba(0, 0, 0, 0.8)',
-        color: 'white',
-        padding: '15px',
-        borderRadius: '8px',
-        fontSize: '14px',
-        lineHeight: '1.5'
-      }
-    },
-      React.createElement('div', { style: { marginBottom: '10px', fontWeight: 'bold' } }, '노드 범례'),
-      React.createElement('div', { style: { display: 'flex', alignItems: 'center', marginBottom: '5px' } },
-        React.createElement('div', {
-          style: {
-            width: '20px',
-            height: '20px',
-            backgroundColor: '#ffffff',
-            border: '2px solid #e31e24',
-            marginRight: '8px'
-          }
-        }),
-        'PDF 페이지'
-      ),
-      React.createElement('div', { style: { display: 'flex', alignItems: 'center', marginBottom: '5px' } },
-        React.createElement('div', {
-          style: {
-            width: '16px',
-            height: '16px',
-            backgroundColor: '#e74c3c',
-            borderRadius: '50%',
-            marginRight: '8px'
-          }
-        }),
-        'AI 키워드'
-      ),
-      React.createElement('div', { style: { display: 'flex', alignItems: 'center' } },
-        React.createElement('div', {
-          style: {
-            width: '16px',
-            height: '16px',
-            backgroundColor: '#f39c12',
-            borderRadius: '50%',
-            marginRight: '8px'
-          }
-        }),
-        '컨설팅 인사이트'
-      )
-    ),
-    // 안내 메시지
-    React.createElement('div', {
-      style: {
-        position: 'absolute',
-        bottom: '20px',
-        left: '20px',
-        backgroundColor: 'rgba(0, 0, 0, 0.8)',
-        color: 'white',
-        padding: '10px',
-        borderRadius: '8px',
-        fontSize: '12px'
-      }
-    },
-      '💡 PDF 페이지를 클릭하면 상세 정보를 볼 수 있습니다'
-    )
-  );
+    ref: mountRef,
+    className: 'graph-container'
+  });
 }
 
 // Control Panel Component
@@ -605,7 +756,27 @@ function PDFPageModal({ page, onClose }) {
       // Content - 이미지 모드와 텍스트 모드 구분
       isImageMode ? 
       // 이미지 모드 레이아웃
-      React.createElement('div', { className: 'grid grid-cols-1 lg:grid-cols-2 gap-6' },        
+      React.createElement('div', { className: 'grid grid-cols-1 lg:grid-cols-3 gap-6' },
+        // 이미지 미리보기 (왼쪽)
+        React.createElement('div', { className: 'lg:col-span-1' },
+          React.createElement('h3', { className: 'text-lg font-semibold mb-2 flex items-center gap-2' },
+            React.createElement('i', { className: 'fas fa-image text-purple-600' }),
+            '페이지 이미지'
+          ),
+          React.createElement('div', {
+            className: 'border rounded-lg overflow-hidden bg-gray-50'
+          },
+            React.createElement('img', {
+              src: page.thumbnail || page.imageDataUrl,
+              alt: `페이지 ${page.pageNumber}`,
+              className: 'w-full h-auto max-h-80 object-contain'
+            })
+          ),
+          React.createElement('p', { className: 'text-xs text-gray-500 mt-2' },
+            `원본 크기: ${page.width} x ${page.height}px`
+          )
+        ),
+        
         // 메타데이터 (오른쪽)
         React.createElement('div', { className: 'lg:col-span-2' },
           React.createElement('h3', { className: 'text-lg font-semibold mb-2' }, '추출된 텍스트'),
@@ -1063,6 +1234,86 @@ function App() {
             ]);
             
             // Show review candidates if any (통합 모드에도 온톨로지 검토 필요 항목이 있을 수 있음)
+            if (result.needsReview && result.needsReview.count > 0) {
+              setTimeout(() => {
+                const reviewInfo = result.needsReview.topCandidates.map(
+                  candidate => `🔍 ${candidate.text} (${(candidate.confidence * 100).toFixed(0)}%)`
+                ).join('\n');
+                
+                if (confirm(`검토가 필요한 ${result.needsReview.count}개 항목이 있습니다:\n\n${reviewInfo}\n\n검토 패널을 여시겠습니까?`)) {
+                  setShowReviewPanel(true);
+                  setInsights(prev => [...prev, '📋 검토 패널이 열렸습니다. 승인/거절을 진행해주세요']);
+                  loadReviewItems();
+                }
+              }, 2000);
+            }
+          } else if (result.processingMode === 'pages') {
+            // PDF 페이지 모드 인사이트
+            setInsights([
+              result.message,
+              `📄 PDF 문서: ${result.processedDocument.filename}`,
+              `📑 총 페이지: ${result.pdfAnalysis.pages}개`,
+              `🔗 페이지 관계: ${result.pdfAnalysis.pageRelationships}개`,
+              `🏷️ 주요 주제: ${result.pdfAnalysis.mainTopics.join(', ')}`,
+              `⏱️ 처리 시간: ${result.pdfAnalysis.processingTime}ms`,
+              '✨ 각 페이지가 개별 노드로 생성되었습니다',
+              '🎯 페이지 노드를 클릭하여 상세 내용을 확인하세요'
+            ]);
+            
+            // PDF 특화 KPIs
+            setKpis([
+              { label: '페이지 수', value: `${result.pdfAnalysis.pages}개` },
+              { label: '페이지 관계', value: `${result.pdfAnalysis.pageRelationships}개` },
+              { label: '주제 수', value: `${result.pdfAnalysis.mainTopics.length}개` },
+              { label: '처리 시간', value: `${(result.pdfAnalysis.processingTime/1000).toFixed(1)}초` }
+            ]);
+          } else if (result.processingMode === 'images') {
+            // PDF 이미지 모드 인사이트 (신규)
+            setInsights([
+              result.message,
+              `🖼️ PDF 문서: ${result.processedDocument.filename}`,
+              `📸 이미지 페이지: ${result.pdfImageAnalysis.pageImages}개`,
+              `🔗 페이지 관계: ${result.pdfImageAnalysis.pageRelationships}개`,
+              `🏷️ 주요 주제: ${result.pdfImageAnalysis.mainTopics.join(', ')}`,
+              `⏱️ 처리 시간: ${result.pdfImageAnalysis.processingTime}ms`,
+              '🎨 각 페이지가 실제 이미지로 3D 그래프에 표시됩니다',
+              '🖱️ 페이지 이미지를 클릭하여 메타정보를 확인하세요',
+              '✨ 원형 배치로 페이지 순서가 시각화되었습니다'
+            ]);
+            
+            // PDF 이미지 특화 KPIs
+            setKpis([
+              { label: '이미지 페이지', value: `${result.pdfImageAnalysis.pageImages}개` },
+              { label: '페이지 관계', value: `${result.pdfImageAnalysis.pageRelationships}개` },
+              { label: '주요 주제', value: `${result.pdfImageAnalysis.mainTopics.length}개` },
+              { label: '변환 시간', value: `${(result.pdfImageAnalysis.processingTime/1000).toFixed(1)}초` }
+            ]);
+          } else {
+            // 기존 온톨로지 모드 인사이트
+            setInsights([
+              result.message,
+              `📄 문서: ${result.processedDocument.filename}`,
+              `🎯 문서 타입: ${result.processedDocument.documentType}`,
+              `👤 클라이언트: ${result.processedDocument.client}`,
+              `📊 전체 신뢰도: ${(result.processedDocument.confidence * 100).toFixed(1)}%`,
+              `✅ 자동 승인: 엔티티 ${result.autoApproved.entities}개, 관계 ${result.autoApproved.relationships}개`,
+              `⏳ 검토 필요: ${result.needsReview.count}개 항목`,
+              '🔄 지식 그래프 자동 확장 완료!'
+            ]);
+            
+            // 기존 KPIs
+            const mappingAccuracy = Math.min(98, 94 + Math.random() * 4);
+            const processingTime = (1.5 + Math.random() * 1.0).toFixed(1);
+            const autoApprovalRate = Math.min(95, 87 + Math.random() * 8);
+            
+            setKpis([
+              { label: '매핑 정확도', value: `${mappingAccuracy.toFixed(1)}%` },
+              { label: '처리 시간', value: `${processingTime}초` },
+              { label: '자동 승인율', value: `${autoApprovalRate.toFixed(0)}%` },
+              { label: '검토 대기', value: `${result.needsReview.count}개` }
+            ]);
+
+            // Show review candidates if any
             if (result.needsReview && result.needsReview.count > 0) {
               setTimeout(() => {
                 const reviewInfo = result.needsReview.topCandidates.map(
