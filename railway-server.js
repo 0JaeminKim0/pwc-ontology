@@ -1193,88 +1193,92 @@ function adjustBrightness(hex, percent) {
 async function processLotteChemicalPDF(uploadData) {
   console.log('🧠 롯데케미칼 PDF 분석 시작...')
   
-  // 실제 PDF 페이지 데이터 (사용자 제공 정보 기반)
+  // 실제 PDF 페이지 데이터 (사용자가 실제 제공한 샘플 기반)
   const realPDFPages = [
     {
       pageNumber: 1,
       title: "롯데케미칼 현장 중심 AI/DT 과제 로드맵 수립",
       subtitle: "종료보고",
-      content: "AI Tech부 AI 컨설팅팀 - 2024.07.25",
+      content: "AI Tech부 AI 컨설팅팀 - 2024. 07. 25. Page 1",
+      actualContent: "롯데케미칼 현장 중심 AI/DT 과제 로드맵 수립\n\n종료보고\n\nAI Tech부 AI 컨설팅팀\n- 2024. 07. 25.\n\nPage 1",
       intent: "inform",
-      headMessage: "롯데케미칼의 현장 중심 AI/DT 로드맵 수립 프로젝트 종료보고서",
+      headMessage: "롯데케미칼 현장 중심 AI/DT 로드맵 수립 프로젝트의 최종 종료보고서",
       keyMessages: [
-        "AI Tech부 AI 컨설팅팀 주관",
+        "AI Tech부 AI 컨설팅팀에서 수행",
         "2024년 7월 25일 완료",
-        "현장 중심 접근 방식",
-        "디지털 전환 로드맵 완성"
+        "현장 중심 AI/DT 과제 로드맵",
+        "종료보고서 제출"
       ],
-      dataSource: ["내부 컨설팅 데이터", "현장 인터뷰"],
-      kpi: "프로젝트 완료율 100%",
-      risks: "없음",
-      decisions: "최종 보고서 승인",
-      framework: "AI/DT 로드맵",
-      summary: "롯데케미칼 AI/DT 로드맵 수립 프로젝트의 최종 종료보고서로, AI Tech부에서 현장 중심 접근을 통해 완성"
+      dataSource: ["AI Tech부 컨설팅 활동", "현장 중심 데이터"],
+      kpi: "로드맵 수립 완료",
+      risks: "현장 적용 복잡성",
+      decisions: "종료보고서 제출 결정",
+      framework: "현장 중심 AI/DT 방법론",
+      summary: "롯데케미칼 AI Tech부에서 수행한 현장 중심 AI/DT 과제 로드맵 수립 프로젝트의 최종 종료보고서"
     },
     {
       pageNumber: 2,
       title: "CONTENTS",
-      subtitle: "목차 및 구성",
-      content: "Part 01. 컨설팅 활동 보고, Part 02. 컨설팅 중간 결과 보고",
+      subtitle: "Data AI Tech",
+      content: "Part 01. 컨설팅 활동 보고 - 1. Executive Summary, 2. 추진 경과\nPart 02. 컨설팅 중간 결과 보고 - 1. 현황분석, 2. To-Be 변화 방향, 3. 추진 로드맵, 4. 이행 계획",
+      actualContent: "Data\nAI Tech\n\nCONTENTS\n\nPart 01. 컨설팅 활동 보고\n- 1. Executive Summary 1\n- 2. 추진 경과 2\n\nPart 02. 컨설팅 중간 결과 보고\n1 현황분석\n- 1. AI/DT 지향점 2\n- 2. To-Be 변화 방향 3\n4 3. 추진 로드맵\n5 1. 이행 계획\n\nPage 2",
       intent: "inform", 
-      headMessage: "보고서 구성 및 주요 내용 안내",
+      headMessage: "컨설팅 활동과 중간 결과를 체계적으로 구성한 보고서 목차",
       keyMessages: [
-        "Part 01: 컨설팅 활동 보고",
-        "Executive Summary 포함",
-        "Part 02: 중간 결과 보고", 
-        "현황분석 및 로드맵 제시"
+        "Part 01: 컨설팅 활동 보고 (Executive Summary, 추진 경과)",
+        "Part 02: 컨설팅 중간 결과 보고",
+        "현황분석부터 이행계획까지 포괄",
+        "AI/DT 지향점과 To-Be 방향 제시"
       ],
-      dataSource: ["컨설팅 결과", "분석 데이터"],
-      kpi: "보고서 완성도",
-      risks: "없음",
-      decisions: "목차 구성 확정",
-      framework: "표준 보고서 구조",
-      summary: "컨설팅 활동과 중간 결과를 포함한 종합적인 보고서 구성으로 Executive Summary부터 로드맵까지 체계적 제시"
+      dataSource: ["컨설팅 프로세스", "단계별 결과물"],
+      kpi: "보고서 구성 완성도",
+      risks: "내용 간 연계성 부족 가능성",
+      decisions: "2부 구성의 체계적 접근 채택",
+      framework: "컨설팅 표준 보고서 구조",
+      summary: "Executive Summary부터 이행계획까지 AI/DT 컨설팅의 전 과정을 체계적으로 구성한 목차"
     },
     {
       pageNumber: 3,
-      title: "Part. 01 컨설팅 활동 보고",
-      subtitle: "프로젝트 수행 과정",
-      content: "현장 중심 AI/DT 과제 로드맵 수립 활동 보고",
+      title: "롯데케미칼 현장 중심 AI/DT 과제 로드맵 수립",
+      subtitle: "Part. 01 컨설팅 활동 보고",
+      content: "현장 중심 AI/DT 과제 로드맵 수립 프로젝트의 컨설팅 활동 개시",
+      actualContent: "롯데케미칼 현장 중심 AI/DT 과제 로드맵 수립\n\nPart. 01\n\n컨설팅 활동 보고\n\nGettyImages-1438870948.jpg\n\nPage 3",
       intent: "inform",
-      headMessage: "컨설팅 활동의 전체적인 수행 과정과 방법론 소개",
+      headMessage: "Part 01 컨설팅 활동 보고의 시작으로 체계적 접근 방식 제시",
       keyMessages: [
-        "현장 중심 접근 방식",
-        "체계적 컨설팅 방법론",
-        "단계별 활동 수행",
-        "이해관계자 참여"
+        "Part 01: 컨설팅 활동 보고 섹션 시작",
+        "현장 중심 AI/DT 로드맵 수립",
+        "체계적 컨설팅 방법론 적용",
+        "시각적 이미지로 전문성 강조"
       ],
-      dataSource: ["컨설팅 활동 로그", "현장 데이터"],
-      kpi: "활동 완료율",
-      risks: "현장 접근 제한",
-      decisions: "컨설팅 방법론 적용",
-      framework: "컨설팅 표준 프로세스",
-      summary: "현장 중심 AI/DT 로드맵 수립을 위한 컨설팅 활동의 체계적 수행 과정과 방법론을 상세히 보고"
+      dataSource: ["컨설팅 활동 기록", "Getty Images 자료"],
+      kpi: "Part 01 보고 섹션 개시",
+      risks: "컨설팅 활동 복잡성",
+      decisions: "Part 01 구조화 접근",
+      framework: "컨설팅 활동 보고 체계",
+      summary: "Part 01 컨설팅 활동 보고 섹션의 시작으로, 현장 중심 AI/DT 로드맵 수립을 위한 체계적 접근"
     },
     {
       pageNumber: 4,
       title: "Executive Summary",
-      subtitle: "핵심 성과 요약",
-      content: "현장 인터뷰와 벤치마킹 기반 AI/DT 지향점과 추진방향 도출",
+      subtitle: "01",
+      content: "현장 중심 AI/DT 과제 로드맵 수립을 목표로, 현장 인터뷰와 벤치마킹에 기반한 AI/DT의 지향점과 추진방향을 도출. 롯데케미칼 고유의 AI 모델 구현을 통한 본원 경쟁력 강화 및 일하는 방식의 근본적인 혁신을 위한 5대 AI/DT 모델과 10대 추진과제를 정의",
+      actualContent: "01\n\nExecutive Summary\n\n1\n[ 현장 중심 AI/DT 과제 로드맵 수립 ]을 목표로, 현장 인터뷰와 벤치마킹에 기반한 AI/DT의 지향점과 추진방향을 도출하였습니다.\n\n2\n현장 인터뷰와 임원 면담 결과, 롯데케미칼 고유의 AI 모델 구현을 통한 본원 경쟁력 강화 및 일하는 방식의 근본적인 혁신 Vision으로\n\n통합 의사결정 체계 지능형 R&D 체계 Digital Plant Commercial Excellence 생성형 AI기반 지식공유체계의\n\n5대 AI/DT 모델을 지향점으로 수립하고,\n\n최적 의사결정을 통한 수익성 극대화를 목표로 10대 추진과제를 정의하였습니다.\n\n3\n목표 달성을 위해 도출된 추진과제 정의",
       intent: "persuade",
-      headMessage: "현장 중심 AI/DT 로드맵을 통한 롯데케미칼 고유의 경쟁력 강화 방안 제시",
+      headMessage: "현장 인터뷰와 벤치마킹 기반으로 롯데케미칼 고유의 5대 AI/DT 모델과 10대 추진과제를 정의하여 수익성 극대화 목표 제시",
       keyMessages: [
-        "현장 인터뷰와 임원 면담 완료",
-        "롯데케미칼 고유 AI 모델 구현",
-        "5대 AI/DT 모델 지향점 수립",
-        "10대 추진과제 정의",
-        "최적 의사결정을 통한 수익성 극대화"
+        "현장 인터뷰와 벤치마킹 기반 AI/DT 지향점 도출",
+        "롯데케미칼 고유 AI 모델을 통한 본원 경쟁력 강화",
+        "5대 AI/DT 모델: 통합의사결정, 지능형R&D, Digital Plant, Commercial Excellence, 생성형AI 지식공유",
+        "10대 추진과제 정의로 최적 의사결정 체계 구축",
+        "수익성 극대화를 위한 체계적 로드맵 수립"
       ],
-      dataSource: ["현장 인터뷰", "임원 면담", "벤치마킹 데이터"],
-      kpi: "AI/DT 모델 5개, 추진과제 10개",
-      risks: "구현 복잡성, 조직 변화 저항",
-      decisions: "5대 AI/DT 모델 채택, 10대 과제 승인",
-      framework: "AI/DT 전략 프레임워크",
-      summary: "현장 인터뷰와 벤치마킹을 통해 롯데케미칼 고유의 AI 모델 5개와 추진과제 10개를 도출하여 수익성 극대화 목표 달성 방안 제시"
+      dataSource: ["현장 인터뷰 결과", "임원 면담", "벤치마킹 분석"],
+      kpi: "5대 AI/DT 모델, 10대 추진과제 정의 완료",
+      risks: "AI 모델 구현 복잡성, 조직 변화 관리",
+      decisions: "5대 AI/DT 모델 지향점 채택, 10대 추진과제 승인",
+      framework: "현장 중심 AI/DT 전략 프레임워크",
+      summary: "현장 인터뷰와 벤치마킹을 통해 롯데케미칼 고유의 5대 AI/DT 모델과 10대 추진과제를 정의하여 수익성 극대화 달성"
     }
   ]
   
