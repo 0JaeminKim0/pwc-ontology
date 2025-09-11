@@ -25,13 +25,18 @@
     "@types/react": "^19.1.12",
     "@types/react-dom": "^19.1.9",
     "@types/three": "^0.180.0",
+    "axios": "^1.11.0",
+    "canvas": "^3.2.0",
     "d3": "^7.9.0",
     "express": "^4.21.2",
     "framer-motion": "^12.23.12",
     "gsap": "^3.13.0",
     "hono": "^4.9.6",
+    "pdf-poppler": "^0.2.1",
+    "pdf2pic": "^3.2.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
+    "sharp": "^0.34.3",
     "three": "^0.180.0"
   },
   "devDependencies": {

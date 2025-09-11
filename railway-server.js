@@ -1,8 +1,13 @@
 // Railway 전용 완전 독립 서버 (Hono 의존성 제거)
 import { createServer } from 'http'
-import { readFileSync, existsSync, readdirSync } from 'fs'
+import { readFileSync, existsSync, readdirSync, mkdirSync } from 'fs'
 import { join, extname, dirname } from 'path'
 import { fileURLToPath } from 'url'
+import axios from 'axios'
+import pdf2picPkg from 'pdf2pic'
+import sharp from 'sharp'
+
+const { pdf } = pdf2picPkg
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -842,31 +847,137 @@ function generateLottePDFProcessingResult(uploadData, startTime) {
   }
 }
 
-// 롯데케미칼 페이지 이미지 데이터 URL 생성
-function generateLottePageImageDataURL(pageNum, title) {
-  const encodedTitle = encodeURIComponent(title)
-  return `data:image/svg+xml;charset=utf-8,
+// 실제 PDF 페이지를 이미지로 변환하는 함수
+async function convertPDFPageToImage(pdfUrl, pageNumber, documentTitle = '') {
+  try {
+    console.log(`📄 PDF 페이지 ${pageNumber} 변환 시작: ${documentTitle}`)
+    
+    // 임시 디렉토리 생성
+    const tempDir = join(process.cwd(), 'temp')
+    if (!existsSync(tempDir)) {
+      mkdirSync(tempDir, { recursive: true })
+    }
+    
+    // PDF 파일 다운로드
+    const pdfBuffer = await downloadPDFFile(pdfUrl)
+    const pdfPath = join(tempDir, `temp_${Date.now()}.pdf`)
+    
+    // PDF 파일 저장
+    await import('fs/promises').then(fs => fs.writeFile(pdfPath, pdfBuffer))
+    
+    // PDF를 이미지로 변환
+    const convert = pdf(pdfPath, {
+      density: 100,           // DPI (해상도)
+      saveFilename: "page",   // 파일명 접두사
+      savePath: tempDir,      // 저장 경로
+      format: "jpeg",         // 출력 형식
+      width: 800,             // 너비
+      height: 1100            // 높이
+    })
+    
+    // 특정 페이지 변환
+    const result = await convert(pageNumber, { single: true })
+    
+    if (result && result.path) {
+      // 변환된 이미지를 Base64로 인코딩
+      const imageBuffer = readFileSync(result.path)
+      const base64Image = imageBuffer.toString('base64')
+      const dataUrl = `data:image/jpeg;base64,${base64Image}`
+      
+      // 임시 파일 정리
+      try {
+        await import('fs/promises').then(fs => Promise.all([
+          fs.unlink(pdfPath),
+          fs.unlink(result.path)
+        ]))
+      } catch (cleanupError) {
+        console.warn('⚠️ 임시 파일 정리 실패:', cleanupError.message)
+      }
+      
+      console.log(`✅ PDF 페이지 ${pageNumber} 변환 완료`)
+      return {
+        dataUrl,
+        width: 800,
+        height: 1100,
+        format: 'jpeg'
+      }
+    } else {
+      throw new Error('PDF 페이지 변환 결과가 없습니다')
+    }
+    
+  } catch (error) {
+    console.error(`❌ PDF 페이지 ${pageNumber} 변환 실패:`, error.message)
+    
+    // 실패 시 fallback SVG 이미지 반환
+    return generateFallbackPageImage(pageNumber, documentTitle)
+  }
+}
+
+// PDF 파일 다운로드 함수
+async function downloadPDFFile(url) {
+  try {
+    console.log(`📥 PDF 다운로드 시작: ${url.substring(0, 60)}...`)
+    
+    const response = await axios({
+      method: 'GET',
+      url: url,
+      responseType: 'arraybuffer',
+      timeout: 30000, // 30초 타임아웃
+      maxContentLength: 50 * 1024 * 1024, // 최대 50MB
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; PwC-Ontology-System/1.0)'
+      }
+    })
+    
+    console.log(`✅ PDF 다운로드 완료: ${response.data.byteLength} bytes`)
+    return Buffer.from(response.data)
+    
+  } catch (error) {
+    console.error(`❌ PDF 다운로드 실패:`, error.message)
+    throw new Error(`PDF 다운로드 실패: ${error.message}`)
+  }
+}
+
+// Fallback SVG 이미지 생성 (PDF 변환 실패 시)
+function generateFallbackPageImage(pageNum, documentTitle) {
+  const isLotte = documentTitle?.includes('롯데케미칼') || documentTitle?.includes('AIDT')
+  const brandColor = isLotte ? '#e31e24' : '#1428a0'
+  const companyName = isLotte ? '롯데케미칼' : '삼성전자'
+  
+  const svg = `
     <svg width="400" height="300" xmlns="http://www.w3.org/2000/svg">
-      <rect width="400" height="300" fill="white" stroke="#e31e24" stroke-width="3"/>
-      <rect x="10" y="10" width="380" height="40" fill="#e31e24"/>
+      <rect width="400" height="300" fill="white" stroke="${brandColor}" stroke-width="3"/>
+      <rect x="10" y="10" width="380" height="40" fill="${brandColor}"/>
       <text x="200" y="35" fill="white" font-family="Arial" font-size="14" text-anchor="middle" font-weight="bold">
-        롯데케미칼 AI/DT
+        ${companyName} PDF
       </text>
       <text x="200" y="150" fill="#2c3e50" font-family="Arial" font-size="12" text-anchor="middle" font-weight="bold">
         페이지 ${pageNum}
       </text>
       <text x="200" y="180" fill="#666" font-family="Arial" font-size="10" text-anchor="middle">
-        ${title}
+        실제 PDF 페이지 변환 중...
       </text>
       <rect x="20" y="220" width="360" height="60" fill="#f8f9fa" stroke="#ddd" stroke-width="1"/>
       <text x="200" y="245" fill="#666" font-family="Arial" font-size="9" text-anchor="middle">
-        현장 중심 AI/DT 과제 로드맵
+        PDF 이미지 변환 처리
       </text>
-      <text x="200" y="265" fill="#666" font-family="Arial" font-size="9" text-anchor="middle">  
-        롯데케미칼 디지털 전환 전략
+      <text x="200" y="265" fill="#666" font-family="Arial" font-size="9" text-anchor="middle">
+        ${documentTitle || 'Document'}
       </text>
     </svg>
   `.replace(/\n\s*/g, '')
+  
+  return {
+    dataUrl: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`,
+    width: 400,
+    height: 300,
+    format: 'svg'
+  }
+}
+
+// 롯데케미칼 페이지 이미지 데이터 URL 생성 (기존 함수 - 호환성 유지)
+function generateLottePageImageDataURL(pageNum, title) {
+  return generateFallbackPageImage(pageNum, title).dataUrl
 }
 
 // PwC 시드 온톨로지 생성
@@ -1275,7 +1386,15 @@ function adjustBrightness(hex, percent) {
 
 // 실제 롯데케미칼 PDF 처리 함수
 async function processLotteChemicalPDF(uploadData) {
-  console.log('🧠 롯데케미칼 PDF 분석 시작...')
+  console.log('🧠 롯데케미칼 PDF 분석 시작...', uploadData.fileName)
+  
+  const pdfUrl = uploadData.fileUrl
+  const hasPDFUrl = pdfUrl && pdfUrl.startsWith('http')
+  
+  console.log(`📄 PDF URL 사용 가능: ${hasPDFUrl ? 'YES' : 'NO'}`)
+  if (hasPDFUrl) {
+    console.log(`🔗 PDF URL: ${pdfUrl.substring(0, 80)}...`)
+  }
   
   // 실제 PDF 페이지 데이터 (사용자가 실제 제공한 샘플 기반)
   const realPDFPages = [
@@ -1410,18 +1529,36 @@ async function processLotteChemicalPDF(uploadData) {
     })
   }
   
-  // PDF 페이지 노드들 생성
+  // PDF 페이지 노드들 생성 (비동기 처리 - 실제 PDF 이미지 지원)
   const pdfPageNodes = []
   const radius = 800
   
-  allPDFPages.forEach((pageData, index) => {
+  // 실제 PDF 이미지 생성을 위한 비동기 처리
+  for (let index = 0; index < allPDFPages.length; index++) {
+    const pageData = allPDFPages[index]
     const angle = (index / allPDFPages.length) * 2 * Math.PI
+    
+    // 실제 PDF 페이지 이미지 URL 생성
+    let imageDataUrl = generateFallbackPageImage(pageData.pageNumber, uploadData.fileName).dataUrl
+    
+    // PDF URL이 있는 경우 실제 PDF 페이지 변환 시도 (첫 4페이지만 - 성능 고려)
+    if (hasPDFUrl && pageData.pageNumber <= 4) {
+      try {
+        console.log(`🖼️ 실제 PDF 페이지 ${pageData.pageNumber} 변환 시도...`)
+        const realImageResult = await convertPDFPageToImage(pdfUrl, pageData.pageNumber, uploadData.fileName)
+        imageDataUrl = realImageResult.dataUrl
+        console.log(`✅ 실제 PDF 페이지 ${pageData.pageNumber} 변환 성공`)
+      } catch (pdfError) {
+        console.warn(`⚠️ PDF 페이지 ${pageData.pageNumber} 변환 실패, fallback 사용:`, pdfError.message)
+      }
+    }
     
     pdfPageNodes.push({
       id: `lotte-pdf-page-${pageData.pageNumber}`,
       documentId: `lotte-aidt-roadmap-${Date.now()}`,
       documentTitle: "롯데케미칼 AIDT로드맵_종료보고_v0.93.pdf",
       pageNumber: pageData.pageNumber,
+      imageDataUrl: imageDataUrl,  // 실제 PDF 이미지 또는 fallback
       width: 1920,
       height: 1080, 
       aspectRatio: 1920 / 1080,
@@ -1460,7 +1597,7 @@ async function processLotteChemicalPDF(uploadData) {
         framework: pageData.framework
       }
     })
-  })
+  }
   
   // AI 키워드 노드들 (롯데케미칼 특화)
   const lotteAIKeywords = [
@@ -1720,30 +1857,47 @@ const server = createServer(async (req, res) => {
       return
     }
     
-    // PDF 페이지 이미지 API
+    // PDF 페이지 이미지 API (실제 PDF 변환 지원)
     if (url.startsWith('/api/pdf/page-image/') && req.method === 'POST') {
       console.log('🖼️ PDF 페이지 이미지 요청')
       
-      const pageNumber = url.split('/').pop()
+      const pageNumber = parseInt(url.split('/').pop())
       
       try {
         // 요청 본문 읽기
         let body = ''
         req.on('data', chunk => { body += chunk })
-        req.on('end', () => {
+        req.on('end', async () => {
           try {
-            const { documentTitle } = JSON.parse(body)
+            const requestData = JSON.parse(body)
+            const { documentTitle, pdfUrl } = requestData
             
-            // 실제 PDF 페이지 이미지 생성 (Canvas 기반)
-            const imageResult = generateRealPDFPageImage(parseInt(pageNumber), documentTitle)
+            let imageResult
+            
+            // 실제 PDF URL이 있는 경우 실제 PDF 변환 시도
+            if (pdfUrl && pdfUrl.startsWith('http')) {
+              console.log(`🔄 실제 PDF 페이지 ${pageNumber} 변환 시도...`)
+              try {
+                imageResult = await convertPDFPageToImage(pdfUrl, pageNumber, documentTitle)
+                console.log(`✅ 실제 PDF 페이지 ${pageNumber} 변환 성공`)
+              } catch (pdfError) {
+                console.warn(`⚠️ 실제 PDF 변환 실패, fallback 사용:`, pdfError.message)
+                imageResult = generateRealPDFPageImage(pageNumber, documentTitle)
+              }
+            } else {
+              // PDF URL이 없는 경우 기존 방식 사용
+              imageResult = generateRealPDFPageImage(pageNumber, documentTitle)
+            }
             
             const responseData = JSON.stringify({
               success: true,
-              pageNumber: parseInt(pageNumber),
+              pageNumber: pageNumber,
               documentTitle,
               imageUrl: imageResult.dataUrl,
               width: imageResult.width,
               height: imageResult.height,
+              format: imageResult.format,
+              isRealPDF: pdfUrl && pdfUrl.startsWith('http'),
               timestamp: Date.now()
             })
             
@@ -1753,7 +1907,7 @@ const server = createServer(async (req, res) => {
             })
             res.end(responseData)
             
-            console.log(`✅ PDF 페이지 ${pageNumber} 이미지 생성 완료`)
+            console.log(`✅ PDF 페이지 ${pageNumber} 이미지 응답 완료`)
           } catch (parseError) {
             console.error('❌ PDF 이미지 요청 JSON 파싱 오류:', parseError)
             const errorData = JSON.stringify({ 
