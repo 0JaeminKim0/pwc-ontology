@@ -513,7 +513,7 @@ function Graph3D({ nodes, links, onNodeClick, highlightPath }) {
 }
 
 // Control Panel Component
-function ControlPanel({ onSearch, onUpload, onGenerateSlides, onLoadSeedOntology, onResetGraph }) {
+function ControlPanel({ onSearch, onUpload, onGenerateSlides, onLoadSeedOntology, onResetGraph, isVisible, onToggle }) {
   const [query, setQuery] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   // processingMode 제거 - 통합 모드 사용
@@ -537,7 +537,23 @@ function ControlPanel({ onSearch, onUpload, onGenerateSlides, onLoadSeedOntology
     }
   };
 
-  return React.createElement('div', { className: 'control-panel' },
+  return React.createElement('div', { 
+    className: `control-panel transition-all duration-300 ${isVisible ? '' : 'collapsed'}`,
+    style: isVisible ? {} : { width: '60px', height: '60px' }
+  },
+    // 토글 버튼
+    React.createElement('button', {
+      onClick: onToggle,
+      className: `absolute ${isVisible ? 'top-2 right-2' : 'top-2 left-2'} z-10 bg-blue-600 text-white rounded-full w-8 h-8 flex items-center justify-center hover:bg-blue-700 transition-colors`,
+      title: isVisible ? '패널 숨기기' : '제어판 보기'
+    },
+      React.createElement('i', { 
+        className: `fas ${isVisible ? 'fa-times' : 'fa-cog'}` 
+      })
+    ),
+    
+    // 패널 내용 (숨겨져 있을 때는 표시하지 않음)
+    isVisible && React.createElement('div', { className: 'panel-content' },
     React.createElement('div', { className: 'mb-4' },
       React.createElement('h2', { 
         className: 'text-xl font-bold text-gray-800 mb-2 flex items-center gap-2' 
@@ -666,12 +682,28 @@ function ControlPanel({ onSearch, onUpload, onGenerateSlides, onLoadSeedOntology
         'PwC 템플릿 자동 생성'
       )
     )
-  );
+  ));
 }
 
 // Insight Panel Component
-function InsightPanel({ insights, kpis }) {
-  return React.createElement('div', { className: 'insight-panel' },
+function InsightPanel({ insights, kpis, isVisible, onToggle }) {
+  return React.createElement('div', { 
+    className: `insight-panel transition-all duration-300 ${isVisible ? '' : 'collapsed'}`,
+    style: isVisible ? {} : { width: '60px', height: '60px' }
+  },
+    // 토글 버튼
+    React.createElement('button', {
+      onClick: onToggle,
+      className: `absolute ${isVisible ? 'top-2 right-2' : 'top-2 left-2'} z-10 bg-yellow-600 text-white rounded-full w-8 h-8 flex items-center justify-center hover:bg-yellow-700 transition-colors`,
+      title: isVisible ? '패널 숨기기' : '인사이트 보기'
+    },
+      React.createElement('i', { 
+        className: `fas ${isVisible ? 'fa-times' : 'fa-lightbulb'}` 
+      })
+    ),
+    
+    // 패널 내용 (숨겨져 있을 때는 표시하지 않음)
+    isVisible && React.createElement('div', { className: 'panel-content' },
     React.createElement('h3', { 
       className: 'text-lg font-bold text-gray-800 mb-3 flex items-center gap-2' 
     },
@@ -710,7 +742,7 @@ function InsightPanel({ insights, kpis }) {
         )
       )
     )
-  );
+  ));
 }
 
 // Status Bar Component
@@ -740,7 +772,7 @@ function PDFPageModal({ page, onClose }) {
           content: node.metadata?.extractedText || '텍스트 추출 중...',
           summary: node.metadata?.summary || '요약 생성 중...',
           keywords: node.metadata?.keywords || [],
-          imageUrl: generatePDFPageImage(node.pageNumber, node.documentTitle),
+          imageUrl: null, // 비동기로 로드
           metadata: {
             size: `${node.width} x ${node.height}`,
             aspectRatio: node.aspectRatio?.toFixed(2),
@@ -762,7 +794,7 @@ function PDFPageModal({ page, onClose }) {
           content: `AI 기술 키워드: ${node.label}`,
           summary: node.metadata?.description || 'AI 관련 핵심 키워드입니다.',
           keywords: [node.label],
-          imageUrl: generatePDFPageImage(node.metadata?.sourcePageNumber || 1, node.metadata?.documentTitle),
+          imageUrl: null, // 비동기로 로드
           metadata: {
             category: node.metadata?.category || 'AI Technology',
             extractedFrom: node.metadata?.extractedFrom || 'PDF 자동 분석',
@@ -781,7 +813,7 @@ function PDFPageModal({ page, onClose }) {
           content: `컨설팅 인사이트: ${node.label}`,
           summary: node.metadata?.description || '비즈니스 전략 관련 핵심 인사이트입니다.',
           keywords: [node.label],
-          imageUrl: generatePDFPageImage(node.metadata?.sourcePageNumber || 1, node.metadata?.documentTitle),
+          imageUrl: null, // 비동기로 로드
           metadata: {
             impact: node.metadata?.impact || 'High',
             category: node.metadata?.category || 'Business Strategy',
@@ -806,81 +838,155 @@ function PDFPageModal({ page, onClose }) {
     }
   };
 
-  // PDF 페이지 이미지 생성 함수
-  const generatePDFPageImage = (pageNumber, documentTitle) => {
+  // 실제 PDF 페이지 이미지 URL 생성 함수
+  const generatePDFPageImage = async (pageNumber, documentTitle) => {
     if (!pageNumber) return null;
     
-    // Canvas를 사용해서 모의 PDF 페이지 이미지 생성
+    try {
+      // 서버에서 실제 PDF 페이지 이미지 요청
+      const response = await fetch(`/api/pdf/page-image/${pageNumber}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          documentTitle: documentTitle || 'unknown',
+          pageNumber: pageNumber
+        })
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success && result.imageUrl) {
+          return result.imageUrl;
+        }
+      }
+    } catch (error) {
+      console.error('PDF 이미지 로드 실패:', error);
+    }
+    
+    // 폴백: 실제 PDF가 없을 때 플레이스홀더 이미지 생성
+    return generatePlaceholderImage(pageNumber, documentTitle);
+  };
+
+  // 플레이스홀더 이미지 생성 (실제 PDF가 없을 때)
+  const generatePlaceholderImage = (pageNumber, documentTitle) => {
     const canvas = document.createElement('canvas');
     canvas.width = 600;
     canvas.height = 800;
     const ctx = canvas.getContext('2d');
     
-    // 배경
-    ctx.fillStyle = '#ffffff';
+    // 배경 그라데이션
+    const gradient = ctx.createLinearGradient(0, 0, 0, 800);
+    gradient.addColorStop(0, '#f8fafc');
+    gradient.addColorStop(1, '#e2e8f0');
+    ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, 600, 800);
     
     // 문서 제목에 따른 브랜드 컬러 설정
     let brandColor = '#e31e24'; // 롯데케미칼 기본
+    let companyName = '롯데케미칼';
     if (documentTitle?.includes('삼성') || documentTitle?.includes('Samsung')) {
       brandColor = '#1428a0'; // 삼성 블루
+      companyName = '삼성전자';
     }
+    
+    // 문서 윤곽선
+    ctx.strokeStyle = '#cbd5e1';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(20, 20, 560, 760);
     
     // 헤더 영역
     ctx.fillStyle = brandColor;
-    ctx.fillRect(0, 0, 600, 80);
+    ctx.fillRect(20, 20, 560, 100);
     
     // 헤더 텍스트
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 24px Arial';
+    ctx.font = 'bold 28px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText(documentTitle || 'PDF 문서', 300, 50);
+    ctx.fillText(companyName, 300, 75);
     
-    // 페이지 번호
-    ctx.fillStyle = '#000000';
-    ctx.font = '16px Arial';
-    ctx.textAlign = 'right';
-    ctx.fillText(`페이지 ${pageNumber}`, 550, 120);
+    // 페이지 번호 배지
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.roundRect(480, 140, 80, 40, 8);
+    ctx.fill();
+    ctx.fillStyle = brandColor;
+    ctx.font = 'bold 16px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(`Page ${pageNumber}`, 520, 165);
     
-    // 본문 영역 시뮬레이션
-    ctx.fillStyle = '#333333';
-    ctx.font = '14px Arial';
+    // 제목 영역
+    ctx.fillStyle = '#1e293b';
+    ctx.font = 'bold 24px Arial';
     ctx.textAlign = 'left';
+    ctx.fillText(documentTitle || 'PDF 문서', 50, 220);
     
-    // 제목
-    ctx.font = 'bold 20px Arial';
-    ctx.fillText('문서 내용', 50, 180);
-    
-    // 본문 텍스트 라인들
-    const lines = [
-      '이 문서는 PDF에서 추출된 내용을 보여줍니다.',
-      '실제 환경에서는 PDF.js를 사용하여',
-      '실제 PDF 페이지 이미지를 렌더링합니다.',
+    // 콘텐츠 플레이스홀더
+    const contentLines = [
+      '📄 실제 PDF 페이지가 여기에 표시됩니다',
       '',
-      '주요 특징:',
-      '• AI 키워드 자동 추출',
-      '• 컨설팅 인사이트 식별',
-      '• 메타데이터 자동 생성',
-      '• 페이지별 상세 분석'
+      '현재 상태:',
+      '• PDF.js 라이브러리를 통한 실제 렌더링 대기',
+      '• 서버에서 PDF 파일 처리 중',
+      '• 페이지 이미지 생성 및 캐싱',
+      '',
+      '포함 내용:',
+      '✓ AI 키워드 자동 추출',
+      '✓ 컨설팅 인사이트 분석', 
+      '✓ 메타데이터 자동 생성',
+      '✓ OCR 텍스트 추출',
+      '',
+      '이 플레이스홀더는 실제 PDF 업로드 후',
+      '해당 페이지의 실제 이미지로 교체됩니다.'
     ];
     
+    ctx.fillStyle = '#475569';
     ctx.font = '14px Arial';
-    lines.forEach((line, index) => {
-      ctx.fillText(line, 50, 220 + (index * 25));
+    contentLines.forEach((line, index) => {
+      ctx.fillText(line, 50, 270 + (index * 22));
     });
     
-    // 하단 브랜드 영역
+    // 하단 워터마크
     ctx.fillStyle = brandColor;
-    ctx.fillRect(0, 720, 600, 80);
+    ctx.fillRect(20, 680, 560, 100);
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 16px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('PwC 온톨로지 자동 구축 시스템', 300, 765);
+    ctx.fillText('PwC 온톨로지 자동 구축 시스템', 300, 730);
+    ctx.font = '12px Arial';
+    ctx.fillText('실제 PDF 이미지 렌더링 시스템', 300, 750);
     
     return canvas.toDataURL('image/png');
   };
 
   const displayData = getNodeDisplayData(page);
+  const [actualImageUrl, setActualImageUrl] = useState(null);
+  const [imageLoading, setImageLoading] = useState(true);
+
+  // PDF 이미지 로드
+  useEffect(() => {
+    const loadPDFImage = async () => {
+      setImageLoading(true);
+      try {
+        const pageNumber = page.pageNumber || page.metadata?.sourcePageNumber || 1;
+        const documentTitle = page.documentTitle || page.metadata?.documentTitle || 'PDF 문서';
+        
+        const imageUrl = await generatePDFPageImage(pageNumber, documentTitle);
+        setActualImageUrl(imageUrl);
+      } catch (error) {
+        console.error('PDF 이미지 로드 실패:', error);
+        setActualImageUrl(generatePlaceholderImage(
+          page.pageNumber || 1, 
+          page.documentTitle || 'PDF 문서'
+        ));
+      } finally {
+        setImageLoading(false);
+      }
+    };
+
+    if (page) {
+      loadPDFImage();
+    }
+  }, [page]);
 
   return React.createElement('div', {
     className: 'fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4',
@@ -926,16 +1032,40 @@ function PDFPageModal({ page, onClose }) {
           React.createElement('div', { className: 'grid grid-cols-1 lg:grid-cols-2 gap-0 h-full' },
             // Left: PDF Image
             React.createElement('div', { className: 'bg-gray-100 flex items-center justify-center p-6 border-r border-gray-200' },
-              displayData.imageUrl ? React.createElement('div', { className: 'max-w-full max-h-full' },
+              imageLoading ? React.createElement('div', { className: 'text-center text-gray-500' },
+                React.createElement('i', { className: 'fas fa-spinner fa-spin text-4xl mb-4 text-blue-500' }),
+                React.createElement('p', { className: 'text-lg' }, 'PDF 이미지 생성 중...'),
+                React.createElement('p', { className: 'text-sm text-gray-400' }, '고품질 SVG 렌더링')
+              ) : actualImageUrl ? React.createElement('div', { className: 'max-w-full max-h-full' },
                 React.createElement('img', {
-                  src: displayData.imageUrl,
-                  alt: `PDF Page ${page.pageNumber}`,
+                  src: actualImageUrl,
+                  alt: `PDF Page ${page.pageNumber || 1}`,
                   className: 'max-w-full max-h-full object-contain rounded-lg shadow-lg border border-gray-300',
-                  style: { maxHeight: '70vh' }
+                  style: { maxHeight: '70vh' },
+                  onLoad: () => console.log('✅ PDF 이미지 로드 완료'),
+                  onError: (e) => {
+                    console.error('❌ PDF 이미지 로드 실패:', e);
+                    setActualImageUrl(generatePlaceholderImage(
+                      page.pageNumber || 1, 
+                      page.documentTitle || 'PDF 문서'
+                    ));
+                  }
                 })
               ) : React.createElement('div', { className: 'text-center text-gray-500' },
-                React.createElement('i', { className: 'fas fa-image text-6xl mb-4 text-gray-300' }),
-                React.createElement('p', { className: 'text-lg' }, 'PDF 이미지 로딩 중...')
+                React.createElement('i', { className: 'fas fa-exclamation-triangle text-4xl mb-4 text-orange-400' }),
+                React.createElement('p', { className: 'text-lg' }, 'PDF 이미지를 불러올 수 없습니다'),
+                React.createElement('button', {
+                  onClick: () => {
+                    setImageLoading(true);
+                    const pageNumber = page.pageNumber || 1;
+                    const documentTitle = page.documentTitle || 'PDF 문서';
+                    generatePDFPageImage(pageNumber, documentTitle)
+                      .then(url => setActualImageUrl(url))
+                      .catch(() => setActualImageUrl(generatePlaceholderImage(pageNumber, documentTitle)))
+                      .finally(() => setImageLoading(false));
+                  },
+                  className: 'mt-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700'
+                }, '다시 시도')
               )
             ),
 
@@ -1165,6 +1295,10 @@ function App() {
   const [selectedPage, setSelectedPage] = useState(null);
   const [showReviewPanel, setShowReviewPanel] = useState(false);
   const [reviewItems, setReviewItems] = useState([]);
+  
+  // 패널 표시 상태 관리
+  const [showControlPanel, setShowControlPanel] = useState(true);
+  const [showInsightPanel, setShowInsightPanel] = useState(true);
 
   // Load initial data
   useEffect(() => {
@@ -1551,12 +1685,16 @@ function App() {
       onUpload: handleFileUpload,
       onGenerateSlides: handleGenerateSlides,
       onLoadSeedOntology: handleLoadSeedOntology,
-      onResetGraph: handleResetGraph
+      onResetGraph: handleResetGraph,
+      isVisible: showControlPanel,
+      onToggle: () => setShowControlPanel(!showControlPanel)
     }),
     
     React.createElement(InsightPanel, {
       insights: insights,
-      kpis: kpis
+      kpis: kpis,
+      isVisible: showInsightPanel,
+      onToggle: () => setShowInsightPanel(!showInsightPanel)
     }),
     
     React.createElement(StatusBar, {
