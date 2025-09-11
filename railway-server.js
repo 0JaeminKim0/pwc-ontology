@@ -1034,6 +1034,49 @@ const server = createServer(async (req, res) => {
       return
     }
     
+    // 키워드 검색 API
+    if (url === '/api/search' && req.method === 'POST') {
+      console.log('🎯 키워드 검색 요청')
+      
+      try {
+        let body = ''
+        req.on('data', chunk => { body += chunk })
+        req.on('end', () => {
+          try {
+            const { query } = JSON.parse(body)
+            
+            // 현재 노드들에서 키워드 검색
+            const searchResults = searchNodesForKeyword(query, mockNodes)
+            
+            const responseData = JSON.stringify(searchResults)
+            res.writeHead(200, {
+              'Content-Type': 'application/json',
+              'Content-Length': Buffer.byteLength(responseData)
+            })
+            res.end(responseData)
+            console.log(`✅ 키워드 검색 완료: "${query}" -> ${searchResults.matchedNodes.length}개 노드 매칭`)
+          } catch (parseError) {
+            console.error('❌ JSON 파싱 오류:', parseError)
+            const errorData = JSON.stringify({ success: false, error: 'Invalid JSON' })
+            res.writeHead(400, {
+              'Content-Type': 'application/json',
+              'Content-Length': Buffer.byteLength(errorData)
+            })
+            res.end(errorData)
+          }
+        })
+      } catch (error) {
+        console.error('❌ 키워드 검색 오류:', error)
+        const errorData = JSON.stringify({ success: false, error: error.message })
+        res.writeHead(500, {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(errorData)
+        })
+        res.end(errorData)
+      }
+      return
+    }
+    
     // 온톨로지 리셋 API
     if (url === '/api/ontology/reset' && req.method === 'POST') {
       console.log('🎯 온톨로지 리셋 요청')
@@ -1124,6 +1167,118 @@ const server = createServer(async (req, res) => {
     res.end(`Server Error: ${error.message}`)
   }
 })
+
+// 키워드로 노드 검색하는 함수
+function searchNodesForKeyword(query, nodes) {
+  const keyword = query.toLowerCase().trim()
+  const matchedNodes = []
+  const insights = []
+  const paths = []
+  
+  console.log(`🔍 검색 키워드: "${keyword}"`)
+  
+  // 각 노드에서 키워드 검색
+  nodes.forEach(node => {
+    let isMatch = false
+    let matchReason = ''
+    
+    // 노드 라벨에서 검색
+    if (node.label && node.label.toLowerCase().includes(keyword)) {
+      isMatch = true
+      matchReason += `라벨 매칭: ${node.label}; `
+    }
+    
+    // PDF 페이지 노드의 메타데이터에서 검색
+    if (node.metadata) {
+      // 제목에서 검색
+      if (node.metadata.title && node.metadata.title.toLowerCase().includes(keyword)) {
+        isMatch = true
+        matchReason += `제목 매칭: ${node.metadata.title}; `
+      }
+      
+      // 추출된 텍스트에서 검색
+      if (node.metadata.extractedText && node.metadata.extractedText.toLowerCase().includes(keyword)) {
+        isMatch = true
+        matchReason += `내용 매칭: ${node.metadata.extractedText.substring(0, 50)}...; `
+      }
+      
+      // 키워드 배열에서 검색
+      if (node.metadata.keywords && Array.isArray(node.metadata.keywords)) {
+        const keywordMatch = node.metadata.keywords.find(k => 
+          k.toLowerCase().includes(keyword) || keyword.includes(k.toLowerCase())
+        )
+        if (keywordMatch) {
+          isMatch = true
+          matchReason += `키워드 매칭: ${keywordMatch}; `
+        }
+      }
+      
+      // AI 키워드에서 검색
+      if (node.metadata.aiKeywords && Array.isArray(node.metadata.aiKeywords)) {
+        const aiKeywordMatch = node.metadata.aiKeywords.find(k => 
+          k.toLowerCase().includes(keyword) || keyword.includes(k.toLowerCase())
+        )
+        if (aiKeywordMatch) {
+          isMatch = true
+          matchReason += `AI키워드 매칭: ${aiKeywordMatch}; `
+        }
+      }
+      
+      // 컨설팅 인사이트에서 검색
+      if (node.metadata.consultingInsights && Array.isArray(node.metadata.consultingInsights)) {
+        const insightMatch = node.metadata.consultingInsights.find(insight => 
+          insight.toLowerCase().includes(keyword) || keyword.includes(insight.toLowerCase())
+        )
+        if (insightMatch) {
+          isMatch = true
+          matchReason += `컨설팅인사이트 매칭: ${insightMatch}; `
+        }
+      }
+      
+      // 요약에서 검색
+      if (node.metadata.summary && node.metadata.summary.toLowerCase().includes(keyword)) {
+        isMatch = true
+        matchReason += `요약 매칭: ${node.metadata.summary.substring(0, 50)}...; `
+      }
+    }
+    
+    if (isMatch) {
+      matchedNodes.push({
+        nodeId: node.id,
+        nodeType: node.type || 'unknown',
+        label: node.label || node.pageTitle || 'Untitled',
+        matchReason: matchReason.trim(),
+        confidence: node.confidence || (node.metadata && node.metadata.confidence) || 0.9,
+        position: { x: node.x, y: node.y, z: node.z }
+      })
+      
+      // 매칭된 노드별 인사이트 생성
+      if (node.type === 'pdf_page_image') {
+        insights.push(`📄 페이지 "${node.label}"에서 "${keyword}" 관련 내용을 발견했습니다.`)
+      } else if (node.type === 'ai_keyword') {
+        insights.push(`🔴 AI 키워드 "${node.label}"가 "${keyword}"와 연관됩니다.`)
+      } else if (node.type === 'consulting_insight') {
+        insights.push(`🟡 컨설팅 인사이트 "${node.label}"에서 "${keyword}" 관련 통찰을 찾았습니다.`)
+      }
+    }
+  })
+  
+  // 검색 결과가 있는 경우 경로 생성 (블링킹용)
+  // 프론트엔드는 단순 노드 ID 배열을 기대함
+  const pathNodeIds = matchedNodes.length > 0 ? matchedNodes.map(n => n.nodeId) : []
+  
+  console.log(`✅ 검색 결과: ${matchedNodes.length}개 노드 매칭`)
+  
+  return {
+    success: true,
+    query: keyword,
+    matchedNodes: matchedNodes,
+    totalMatches: matchedNodes.length,
+    path: pathNodeIds,
+    insights: insights,
+    searchTime: Date.now()
+  }
+}
 
 server.listen(port, '0.0.0.0', () => {
   console.log(`✅ Railway 독립 서버가 http://0.0.0.0:${port}에서 실행 중`)
