@@ -1438,16 +1438,15 @@ function App() {
 
   const handleFileUpload = async (file, processingMode = 'ontology') => {
     try {
-      // Enhanced file upload with PDF pages support
+      // 실제 파일 업로드 (multipart/form-data) 사용
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('processingMode', processingMode);
+      
       const response = await fetch('/api/documents/upload', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          fileName: file.name,
-          fileSize: file.size,
-          fileContent: `Mock content for ${file.name}`,
-          processingMode: processingMode
-        })
+        // Content-Type을 설정하지 않음 (브라우저가 자동으로 multipart/form-data로 설정)
+        body: formData
       });
       
       const result = await response.json();
