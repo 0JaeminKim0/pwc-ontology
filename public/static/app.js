@@ -30,8 +30,8 @@ function Graph3D({ nodes, links, onNodeClick, highlightPath }) {
     directionalLight.position.set(50, 50, 50);
     scene.add(directionalLight);
 
-    // Controls for orbit - 카메라를 더 멀리 배치
-    camera.position.set(0, 0, 600);
+    // Controls for orbit - 카메라를 더욱 멀리 배치하여 전체 그래프 조망
+    camera.position.set(0, 0, 1200);
 
     // Group for all graph elements
     const group = new THREE.Group();
@@ -90,8 +90,8 @@ function Graph3D({ nodes, links, onNodeClick, highlightPath }) {
     };
 
     const onWheel = (event) => {
-      camera.position.z += event.deltaY * 0.3;
-      camera.position.z = Math.max(300, Math.min(1500, camera.position.z));
+      camera.position.z += event.deltaY * 0.5;
+      camera.position.z = Math.max(600, Math.min(3000, camera.position.z));
     };
 
     renderer.domElement.addEventListener('mousedown', onMouseDown);
@@ -206,8 +206,8 @@ function Graph3D({ nodes, links, onNodeClick, highlightPath }) {
       }
       
       const mesh = new THREE.Mesh(geometry, material);
-      // 노드 간격을 넓히기 위해 스케일을 3배로 증가
-      mesh.position.set((node.x - 150) * 3, (node.y - 75) * 3, (node.z || 0) * 2);
+      // 노드 간격을 대폭 넓히기 위해 스케일을 8배로 증가
+      mesh.position.set((node.x - 150) * 8, (node.y - 75) * 8, (node.z || 0) * 4);
       mesh.userData = { node };
 
       // Add click handler for PDF page nodes (both types)
@@ -289,8 +289,8 @@ function Graph3D({ nodes, links, onNodeClick, highlightPath }) {
       if (!sourceNode || !targetNode) return;
 
       const geometry = new THREE.BufferGeometry().setFromPoints([
-        new THREE.Vector3((sourceNode.x - 150) * 3, (sourceNode.y - 75) * 3, (sourceNode.z || 0) * 2),
-        new THREE.Vector3((targetNode.x - 150) * 3, (targetNode.y - 75) * 3, (targetNode.z || 0) * 2)
+        new THREE.Vector3((sourceNode.x - 150) * 8, (sourceNode.y - 75) * 8, (sourceNode.z || 0) * 4),
+        new THREE.Vector3((targetNode.x - 150) * 8, (targetNode.y - 75) * 8, (targetNode.z || 0) * 4)
       ]);
 
       const material = new THREE.LineBasicMaterial({ 

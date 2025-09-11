@@ -368,7 +368,7 @@ function generateSamsungPDFProcessingResult(uploadData, startTime) {
   const pageImageNodes = []
   for (let i = 1; i <= 5; i++) {
     const angle = ((i - 1) / 5) * 2 * Math.PI
-    const radius = 400
+    const radius = 800
     
     pageImageNodes.push({
       id: `page-img-${Date.now()}-${i}`,
@@ -416,7 +416,7 @@ function generateSamsungPDFProcessingResult(uploadData, startTime) {
   
   aiKeywords.forEach((keyword, index) => {
     const angle = (index / aiKeywords.length) * 2 * Math.PI
-    const radius = 700 + index * 20
+    const radius = 1400 + index * 40
     
     aiKeywordNodes.push({
       id: `ai-keyword-${Date.now()}-${index}`,
@@ -449,7 +449,7 @@ function generateSamsungPDFProcessingResult(uploadData, startTime) {
   
   consultingInsights.forEach((insight, index) => {
     const angle = (index / consultingInsights.length + Math.PI) * 2 * Math.PI
-    const radius = 800 + index * 30
+    const radius = 1600 + index * 60
     
     consultingInsightNodes.push({
       id: `consulting-${Date.now()}-${index}`,
@@ -590,7 +590,7 @@ function generateLottePDFProcessingResult(uploadData, startTime) {
   
   for (let i = 1; i <= 4; i++) {
     const angle = ((i - 1) / 4) * 2 * Math.PI
-    const radius = 400
+    const radius = 800
     const pageData = lottePageData[i - 1]
     
     pageImageNodes.push({
@@ -639,7 +639,7 @@ function generateLottePDFProcessingResult(uploadData, startTime) {
   
   lotteAIKeywords.forEach((keyword, index) => {
     const angle = (index / lotteAIKeywords.length) * 2 * Math.PI
-    const radius = 600
+    const radius = 1200
     
     aiKeywordNodes.push({
       id: `lotte-ai-keyword-${Date.now()}-${index}`,
@@ -672,7 +672,7 @@ function generateLottePDFProcessingResult(uploadData, startTime) {
   
   lotteConsultingInsights.forEach((insight, index) => {
     const angle = (index / lotteConsultingInsights.length) * 2 * Math.PI + Math.PI / 6
-    const radius = 800
+    const radius = 1600
     
     consultingInsightNodes.push({
       id: `lotte-consulting-${Date.now()}-${index}`,
