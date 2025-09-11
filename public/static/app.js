@@ -30,8 +30,8 @@ function Graph3D({ nodes, links, onNodeClick, highlightPath }) {
     directionalLight.position.set(50, 50, 50);
     scene.add(directionalLight);
 
-    // Controls for orbit - 카메라를 더욱 멀리 배치하여 전체 그래프 조망
-    camera.position.set(0, 0, 1200);
+    // Controls for orbit - 카메라를 적당히 멀리 배치
+    camera.position.set(0, 0, 900);
 
     // Group for all graph elements
     const group = new THREE.Group();
@@ -90,8 +90,8 @@ function Graph3D({ nodes, links, onNodeClick, highlightPath }) {
     };
 
     const onWheel = (event) => {
-      camera.position.z += event.deltaY * 0.5;
-      camera.position.z = Math.max(600, Math.min(3000, camera.position.z));
+      camera.position.z += event.deltaY * 0.4;
+      camera.position.z = Math.max(400, Math.min(2000, camera.position.z));
     };
 
     renderer.domElement.addEventListener('mousedown', onMouseDown);
@@ -206,8 +206,8 @@ function Graph3D({ nodes, links, onNodeClick, highlightPath }) {
       }
       
       const mesh = new THREE.Mesh(geometry, material);
-      // 노드 간격을 대폭 넓히기 위해 스케일을 8배로 증가
-      mesh.position.set((node.x - 150) * 8, (node.y - 75) * 8, (node.z || 0) * 4);
+      // 노드 간격을 적당히 넓히기 위해 스케일을 5배로 조정
+      mesh.position.set((node.x - 150) * 5, (node.y - 75) * 5, (node.z || 0) * 3);
       mesh.userData = { node };
 
       // Add click handler for PDF page nodes (both types)
@@ -289,8 +289,8 @@ function Graph3D({ nodes, links, onNodeClick, highlightPath }) {
       if (!sourceNode || !targetNode) return;
 
       const geometry = new THREE.BufferGeometry().setFromPoints([
-        new THREE.Vector3((sourceNode.x - 150) * 8, (sourceNode.y - 75) * 8, (sourceNode.z || 0) * 4),
-        new THREE.Vector3((targetNode.x - 150) * 8, (targetNode.y - 75) * 8, (targetNode.z || 0) * 4)
+        new THREE.Vector3((sourceNode.x - 150) * 5, (sourceNode.y - 75) * 5, (sourceNode.z || 0) * 3),
+        new THREE.Vector3((targetNode.x - 150) * 5, (targetNode.y - 75) * 5, (targetNode.z || 0) * 3)
       ]);
 
       const material = new THREE.LineBasicMaterial({ 
@@ -1042,13 +1042,24 @@ function App() {
                                      (result.pdfAnalysis?.pageRelationships || 0) + 
                                      (result.pdfImageAnalysis?.pageRelationships || 0);
             
-            // 🔥 실제 삼성전자 DX SCM 데모 데이터 반영
+            // 🔥 파일명에 따른 동적 인사이트 생성
             const aiKeywordCount = result.processedDocument?.aiKeywordCount || 0;
             const consultingInsightCount = result.processedDocument?.consultingInsightCount || 0;
+            const fileName = result.processedDocument.filename || '';
+            
+            // 파일명 기반 분석 제목과 핵심 주제 설정
+            let analysisTitle, coreTopics;
+            if (fileName.includes('롯데케미칼') || fileName.includes('AIDT')) {
+              analysisTitle = '📊 롯데케미칼 AI/DT 로드맵 종료보고 분석 완료';
+              coreTopics = 'Digital Transformation, AI Strategy, Smart Manufacturing, Field-Centered AI';
+            } else {
+              analysisTitle = '📊 삼성전자 DX SCM 생성형 AI 제안서 분석 완료';
+              coreTopics = 'Gen AI, SCM, Multi Agent, NSCM, AI Orchestrator';
+            }
             
             setInsights([
               result.message,
-              `📊 삼성전자 DX SCM 생성형 AI 제안서 분석 완료`,
+              analysisTitle,
               `📄 문서: ${result.processedDocument.filename}`,
               `📑 총 페이지: ${result.pdfAnalysis?.pages || 0}개`,
               `🧠 추출된 엔티티: ${result.ontologyAnalysis?.entities || 0}개`,
@@ -1057,7 +1068,7 @@ function App() {
               `🤖 AI 키워드: ${aiKeywordCount}개 (빨간색 노드)`,
               `💡 컨설팅 인사이트: ${consultingInsightCount}개 (주황색 노드)`,
               `🔗 전체 관계: ${totalRelationships}개`,
-              `🏷️ 핵심 주제: Gen AI, SCM, Multi Agent, NSCM, AI Orchestrator`,
+              `🏷️ 핵심 주제: ${coreTopics}`,
               `⏱️ 총 처리 시간: ${(result.totalProcessingTime/1000).toFixed(1)}초`,
               '🎯 페이지 이미지에서 AI 키워드와 컨설팅 인사이트가 자동 추출되었습니다',
               '🖱️ 각 노드를 클릭하여 상세 메타데이터를 확인하세요',
