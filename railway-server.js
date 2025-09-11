@@ -347,9 +347,21 @@ function getMainHTML() {
 const mockNodes = []
 const mockLinks = []
 
-// Mock 삼성전자 DX SCM PDF 처리 결과 생성
+// PDF 처리 결과 생성 (파일명 기반 분기)
 function generateMockPDFProcessingResult(uploadData) {
   const startTime = Date.now()
+  const fileName = uploadData.fileName || 'samsung_dx_scm.pdf'
+  
+  // 파일명 기반 분기 처리
+  if (fileName.includes('롯데케미칼') || fileName.includes('AIDT')) {
+    return generateLottePDFProcessingResult(uploadData, startTime)
+  } else {
+    return generateSamsungPDFProcessingResult(uploadData, startTime)
+  }
+}
+
+// 삼성전자 DX SCM PDF 처리 결과 생성
+function generateSamsungPDFProcessingResult(uploadData, startTime) {
   const fileName = uploadData.fileName || 'samsung_dx_scm.pdf'
   
   // PDF 페이지 이미지 노드들 (5개 페이지)
@@ -533,6 +545,260 @@ function generateMockPDFProcessingResult(uploadData) {
     newLinks: relationships,
     message: `삼성전자 DX SCM 생성형 AI 제안서 통합 처리 완료: ${allNodes.length}개 노드, ${relationships.length}개 관계 생성`
   }
+}
+
+// 롯데케미칼 AI/DT PDF 처리 결과 생성
+function generateLottePDFProcessingResult(uploadData, startTime) {
+  const fileName = uploadData.fileName || '롯데케미칼 AIDT로드맵_종료보고_v0.93.pdf'
+  
+  // PDF 페이지 이미지 노드들 (4개 페이지 - 제공된 내용 기반)
+  const pageImageNodes = []
+  const lottePageData = [
+    {
+      title: "롯데케미칼 현장 중심 AI/DT 과제 로드맵 수립 종료보고",
+      type: "cover",
+      content: "AI Tech부 AI 컨설팅팀 2024. 07. 25.",
+      keywords: ["롯데케미칼", "AI/DT", "로드맵", "종료보고"],
+      aiKeywords: ["Digital Transformation", "AI Strategy", "Roadmap"],
+      consultingInsights: ["현장 중심 접근", "컨설팅 활동", "전략 수립"]
+    },
+    {
+      title: "CONTENTS",
+      type: "agenda", 
+      content: "Part 01. 컨설팅 활동 보고, Part 02. 컨설팅 중간 결과 보고",
+      keywords: ["컨설팅", "활동보고", "중간결과", "현황분석"],
+      aiKeywords: ["Executive Summary", "Consulting Process", "Analysis"],
+      consultingInsights: ["체계적 접근", "단계별 진행", "결과 도출"]
+    },
+    {
+      title: "컨설팅 활동 보고",
+      type: "section_intro",
+      content: "Part. 01 컨설팅 활동 보고",
+      keywords: ["컨설팅", "활동", "보고서", "Part01"],
+      aiKeywords: ["Consulting Activities", "Reporting", "Documentation"],
+      consultingInsights: ["활동 기록", "프로세스 투명성", "진행 상황"]
+    },
+    {
+      title: "Executive Summary",
+      type: "executive_summary",
+      content: "현장 중심 AI/DT 과제 로드맵 수립을 목표로, 현장 인터뷰와 벤치마킹에 기반한 AI/DT의 지향점과 추진방향 도출. 5대 AI/DT 모델: 통합 의사결정 체계, 지능형 R&D 체계, Digital Plant, Commercial Excellence, 생성형 AI기반 지식공유체계",
+      keywords: ["Executive Summary", "현장중심", "AI/DT모델", "의사결정체계", "지능형R&D", "Digital Plant"],
+      aiKeywords: ["Field-Centered AI", "Decision Support", "Intelligent R&D", "Smart Manufacturing"],
+      consultingInsights: ["현장 인터뷰 기반", "벤치마킹 활용", "5대 모델 수립", "10대 추진과제", "수익성 극대화"]
+    }
+  ]
+  
+  for (let i = 1; i <= 4; i++) {
+    const angle = ((i - 1) / 4) * 2 * Math.PI
+    const radius = 400
+    const pageData = lottePageData[i - 1]
+    
+    pageImageNodes.push({
+      id: `lotte-page-img-${Date.now()}-${i}`,
+      documentId: `lotte-pdf-doc-${Date.now()}`,
+      pageNumber: i,
+      imageDataUrl: generateLottePageImageDataURL(i, pageData.title),
+      width: 1920,
+      height: 1080,
+      aspectRatio: 1920 / 1080,
+      type: 'pdf_page_image',
+      category: 'document_page_image',
+      x: Math.cos(angle) * radius,
+      y: Math.sin(angle) * radius,
+      z: i * 50,
+      color: '#ffffff',
+      label: pageData.title,
+      pageTitle: pageData.title,
+      isNew: true,
+      metadata: {
+        pageNumber: i,
+        title: pageData.title,
+        extractedText: pageData.content,
+        wordCount: 80 + i * 30,
+        hasTitle: true,
+        hasImages: i === 3,
+        hasTables: i === 2,
+        hasCharts: i === 4,
+        pageType: pageData.type,
+        keywords: pageData.keywords,
+        summary: pageData.content,
+        aiKeywords: pageData.aiKeywords,
+        consultingInsights: pageData.consultingInsights,
+        confidence: 0.92 + Math.random() * 0.07
+      }
+    })
+  }
+  
+  // 롯데케미칼 특화 AI 키워드 노드들 (12개)
+  const aiKeywordNodes = []
+  const lotteAIKeywords = [
+    "Digital Transformation", "AI Strategy", "Smart Manufacturing", "Process Optimization",
+    "Decision Support System", "Intelligent R&D", "Digital Plant", "Commercial Excellence", 
+    "Knowledge Management", "Field-Centered AI", "Data Analytics", "Automation"
+  ]
+  
+  lotteAIKeywords.forEach((keyword, index) => {
+    const angle = (index / lotteAIKeywords.length) * 2 * Math.PI
+    const radius = 600
+    
+    aiKeywordNodes.push({
+      id: `lotte-ai-keyword-${Date.now()}-${index}`,
+      label: keyword,
+      type: 'ai_keyword',
+      category: 'ai_concept', 
+      x: Math.cos(angle) * radius,
+      y: Math.sin(angle) * radius,
+      z: 200 + index * 40,
+      color: '#e74c3c',
+      size: 8,
+      isNew: true,
+      confidence: 0.90 + Math.random() * 0.09,
+      metadata: {
+        keyword: keyword,
+        category: 'AI Technology',
+        relevance: 'High',
+        extractedFrom: '롯데케미칼 AI/DT 로드맵 보고서'
+      }
+    })
+  })
+  
+  // 롯데케미칼 특화 컨설팅 인사이트 노드들 (12개)
+  const consultingInsightNodes = []
+  const lotteConsultingInsights = [
+    "현장 중심 접근법", "체계적 로드맵 수립", "5대 AI/DT 모델", "10대 추진과제 정의",
+    "수익성 극대화 전략", "벤치마킹 활용", "현장 인터뷰 기반", "의사결정 체계 구축",
+    "지능형 R&D 전략", "디지털 플랜트 구현", "상업적 우수성", "지식 공유 체계"
+  ]
+  
+  lotteConsultingInsights.forEach((insight, index) => {
+    const angle = (index / lotteConsultingInsights.length) * 2 * Math.PI + Math.PI / 6
+    const radius = 800
+    
+    consultingInsightNodes.push({
+      id: `lotte-consulting-${Date.now()}-${index}`,
+      label: insight,
+      type: 'consulting_insight',
+      category: 'business_insight',
+      x: Math.cos(angle) * radius,
+      y: Math.sin(angle) * radius,
+      z: 160 + index * 50,
+      color: '#f39c12',
+      size: 10,
+      isNew: true,
+      confidence: 0.88 + Math.random() * 0.10,
+      metadata: {
+        insight: insight,
+        category: 'Business Strategy',
+        impact: 'High',
+        extractedFrom: '롯데케미칼 AI/DT 로드맵 보고서'
+      }
+    })
+  })
+  
+  // 모든 노드 결합
+  const allNodes = [...pageImageNodes, ...aiKeywordNodes, ...consultingInsightNodes]
+  
+  // 관계 생성
+  const relationships = []
+  
+  // 페이지 간 순차적 관계
+  for (let i = 0; i < pageImageNodes.length - 1; i++) {
+    relationships.push({
+      source: pageImageNodes[i].id,
+      target: pageImageNodes[i + 1].id,
+      type: 'next_page',
+      strength: 1,
+      evidence: '순차적 페이지'
+    })
+  }
+  
+  // 페이지와 AI 키워드 관계
+  pageImageNodes.forEach((page, pageIndex) => {
+    const startIndex = pageIndex * 3
+    for (let i = 0; i < 3 && startIndex + i < aiKeywordNodes.length; i++) {
+      relationships.push({
+        source: page.id,
+        target: aiKeywordNodes[startIndex + i].id,
+        type: 'contains_ai_concept',
+        strength: 0.8,
+        evidence: 'AI 개념 추출'
+      })
+    }
+  })
+  
+  // 페이지와 컨설팅 인사이트 관계
+  pageImageNodes.forEach((page, pageIndex) => {
+    const startIndex = pageIndex * 3
+    for (let i = 0; i < 3 && startIndex + i < consultingInsightNodes.length; i++) {
+      relationships.push({
+        source: page.id,
+        target: consultingInsightNodes[startIndex + i].id,
+        type: 'generates_insight',
+        strength: 0.75,
+        evidence: '컨설팅 인사이트 도출'
+      })
+    }
+  })
+  
+  const processingTime = Date.now() - startTime
+  
+  return {
+    success: true,
+    processingMode: 'unified',
+    processedDocument: {
+      id: `lotte-pdf-doc-${Date.now()}`,
+      filename: fileName,
+      title: '롯데케미칼 AI/DT 로드맵',
+      aiKeywordCount: aiKeywordNodes.length,
+      consultingInsightCount: consultingInsightNodes.length
+    },
+    pdfAnalysis: {
+      pages: pageImageNodes.length,
+      pageNodes: pageImageNodes.length,
+      pageRelationships: relationships.filter(r => r.type === 'next_page').length,
+      mainTopics: ["AI/DT 로드맵", "현장 중심", "5대 모델", "디지털 변혁"]
+    },
+    pdfImageAnalysis: {
+      pageImages: pageImageNodes.length,
+      pageRelationships: relationships.length,
+      mainTopics: ["컨설팅 활동", "AI 전략", "프로세스 혁신"]
+    },
+    ontologyAnalysis: {
+      entities: aiKeywordNodes.length + consultingInsightNodes.length,
+      relationships: relationships.filter(r => r.type !== 'next_page').length
+    },
+    totalProcessingTime: processingTime,
+    newNodes: allNodes,
+    newLinks: relationships,
+    message: `롯데케미칼 AI/DT 로드맵 보고서 통합 처리 완료: ${allNodes.length}개 노드, ${relationships.length}개 관계 생성`
+  }
+}
+
+// 롯데케미칼 페이지 이미지 데이터 URL 생성
+function generateLottePageImageDataURL(pageNum, title) {
+  const encodedTitle = encodeURIComponent(title)
+  return `data:image/svg+xml;charset=utf-8,
+    <svg width="400" height="300" xmlns="http://www.w3.org/2000/svg">
+      <rect width="400" height="300" fill="white" stroke="#e31e24" stroke-width="3"/>
+      <rect x="10" y="10" width="380" height="40" fill="#e31e24"/>
+      <text x="200" y="35" fill="white" font-family="Arial" font-size="14" text-anchor="middle" font-weight="bold">
+        롯데케미칼 AI/DT
+      </text>
+      <text x="200" y="150" fill="#2c3e50" font-family="Arial" font-size="12" text-anchor="middle" font-weight="bold">
+        페이지 ${pageNum}
+      </text>
+      <text x="200" y="180" fill="#666" font-family="Arial" font-size="10" text-anchor="middle">
+        ${title}
+      </text>
+      <rect x="20" y="220" width="360" height="60" fill="#f8f9fa" stroke="#ddd" stroke-width="1"/>
+      <text x="200" y="245" fill="#666" font-family="Arial" font-size="9" text-anchor="middle">
+        현장 중심 AI/DT 과제 로드맵
+      </text>
+      <text x="200" y="265" fill="#666" font-family="Arial" font-size="9" text-anchor="middle">  
+        롯데케미칼 디지털 전환 전략
+      </text>
+    </svg>
+  `.replace(/\n\s*/g, '')
 }
 
 // PwC 시드 온톨로지 생성
