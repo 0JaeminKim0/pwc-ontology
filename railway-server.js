@@ -1052,7 +1052,7 @@ async function processRealUploadedPDF(uploadData) {
   try {
     // PDF 파일에서 텍스트 추출
     const { readFileSync } = await import('fs')
-    const pdfBuffer = readFileSync(uploadData.fileUrl) // 로컬 파일 경로
+    const pdfBuffer = readFileSync(uploadData.filePath) // 로컬 파일 경로
     
     let pdfTextData = null
     if (pdfParse) {
@@ -1193,7 +1193,7 @@ async function processRealUploadedPDF(uploadData) {
         data: {
           ...pageData,
           imageUrl: imageDataUrl,
-          pdfUrl: uploadData.fileUrl // 로컬 파일 경로 추가
+          pdfUrl: uploadData.filePath // 로컬 파일 경로 추가
         }
       }
       
@@ -1241,7 +1241,7 @@ async function processRealUploadedPDF(uploadData) {
         filename: uploadData.fileName,
         totalPages: totalPages,
         documentType: 'Uploaded PDF Document',
-        filePath: uploadData.fileUrl
+        filePath: uploadData.filePath
       },
       newNodes: allNodes,
       newLinks: relationships
@@ -2226,12 +2226,12 @@ function adjustBrightness(hex, percent) {
 async function processLotteChemicalPDF(uploadData) {
   console.log('🧠 롯데케미칼 PDF LLM 분석 시작...', uploadData.fileName)
   
-  const pdfUrl = uploadData.fileUrl
-  const hasPDFUrl = pdfUrl && pdfUrl.startsWith('http')
+  const pdfPath = uploadData.filePath
+  const hasPDFPath = pdfPath && pdfPath.length > 0
   
-  console.log(`📄 PDF URL 사용 가능: ${hasPDFUrl ? 'YES' : 'NO'}`)
-  if (hasPDFUrl) {
-    console.log(`🔗 PDF URL: ${pdfUrl.substring(0, 80)}...`)
+  console.log(`📄 PDF Path 사용 가능: ${hasPDFPath ? 'YES' : 'NO'}`)
+  if (hasPDFPath) {
+    console.log(`📁 PDF Path: ${pdfPath}`)
   }
 
   let pdfTextData = null
@@ -2936,7 +2936,7 @@ const server = createServer(async (req, res) => {
             const uploadData = {
               fileName: uploadResult.fileName,
               fileSize: uploadResult.fileSize,
-              fileUrl: uploadResult.filePath, // 로컬 파일 경로
+              filePath: uploadResult.filePath, // 로컬 파일 경로
               contentType: uploadResult.contentType
             }
             
@@ -2978,7 +2978,7 @@ const server = createServer(async (req, res) => {
               const isLotteChemical = uploadData.fileName?.includes('롯데케미칼') || uploadData.fileName?.includes('AIDT')
               
               let processingResult
-              if (isLotteChemical && uploadData.fileUrl) {
+              if (isLotteChemical && uploadData.filePath) {
                 // 실제 롯데케미칼 PDF 처리
                 console.log('🔍 실제 롯데케미칼 PDF 처리 시작...')
                 processingResult = await processLotteChemicalPDF(uploadData)
