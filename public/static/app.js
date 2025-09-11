@@ -6,6 +6,9 @@ function Graph3D({ nodes, links, onNodeClick, highlightPath }) {
   const canvasRef = useRef(null);
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
   const [hoveredNode, setHoveredNode] = useState(null);
+  const [camera, setCamera] = useState({ x: 0, y: 0, zoom: 0.5 }); // 줌을 0.5로 시작 (더 멀리)
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
 
   // 캔버스 크기 설정
   useEffect(() => {
@@ -20,32 +23,31 @@ function Graph3D({ nodes, links, onNodeClick, highlightPath }) {
     return () => window.removeEventListener('resize', updateSize);
   }, []);
 
-  // 노드 위치 정규화 함수
+  // 노드 위치 정규화 함수 (카메라 적용)
   const getNormalizedPosition = (node) => {
     const centerX = canvasSize.width / 2;
     const centerY = canvasSize.height / 2;
     
     // 노드가 x, y 좌표를 가지고 있지 않다면 자동으로 배치
+    let worldX, worldY;
     if (!node.x && !node.y) {
       const index = nodes.findIndex(n => n.id === node.id);
       const totalNodes = nodes.length;
-      const radius = Math.min(canvasSize.width, canvasSize.height) * 0.3;
+      const radius = 200; // 고정된 반지름 (더 넓게 배치)
       const angle = (index * 2 * Math.PI) / totalNodes;
       
-      return {
-        x: centerX + Math.cos(angle) * radius,
-        y: centerY + Math.sin(angle) * radius
-      };
+      worldX = Math.cos(angle) * radius;
+      worldY = Math.sin(angle) * radius;
+    } else {
+      // 기존 좌표가 있다면 사용
+      worldX = node.x || 0;
+      worldY = node.y || 0;
     }
     
-    // 기존 좌표가 있다면 화면 중앙 기준으로 스케일링
-    const scale = Math.min(canvasSize.width, canvasSize.height) / 800; // 동적 스케일
-    const offsetX = node.x || 0;
-    const offsetY = node.y || 0;
-    
+    // 카메라 변환 적용 (줌, 팬)
     return {
-      x: centerX + offsetX * scale,
-      y: centerY + offsetY * scale
+      x: centerX + (worldX - camera.x) * camera.zoom,
+      y: centerY + (worldY - camera.y) * camera.zoom
     };
   };
 
@@ -57,28 +59,31 @@ function Graph3D({ nodes, links, onNodeClick, highlightPath }) {
     
     let size, color, shape;
     
-    // 노드 타입별 설정
+    // 노드 타입별 설정 (줌 적용)
+    let baseSize;
     switch (node.type) {
       case 'pdf_page_image':
-        size = 80; // 큰 사각형
+        baseSize = 80; // 큰 사각형
         color = '#ffffff';
         shape = 'rect';
         break;
       case 'ai_keyword':
-        size = 35; // 중간 원형
+        baseSize = 35; // 중간 원형
         color = '#e74c3c';
         shape = 'circle';
         break;
       case 'consulting_insight':
-        size = 35; // 중간 원형
+        baseSize = 35; // 중간 원형
         color = '#f39c12';
         shape = 'circle';
         break;
       default:
-        size = 25; // 기본 원형
+        baseSize = 25; // 기본 원형
         color = node.color || '#3498db';
         shape = 'circle';
     }
+    
+    size = baseSize; // 줌은 getNormalizedPosition에서 처리됨
     
     // 하이라이트 효과
     if (isHighlighted) {
@@ -232,6 +237,9 @@ function Graph3D({ nodes, links, onNodeClick, highlightPath }) {
     
     // 노드 클릭 이벤트 핸들러
     const handleClick = (event) => {
+      // 드래그 중이었다면 클릭 무시
+      if (isDragging) return;
+      
       const rect = canvas.getBoundingClientRect();
       const x = event.clientX - rect.left;
       const y = event.clientY - rect.top;
@@ -239,11 +247,11 @@ function Graph3D({ nodes, links, onNodeClick, highlightPath }) {
       // 클릭된 노드 찾기
       for (const node of nodes) {
         const pos = getNormalizedPosition(node);
-        const size = node.type === 'pdf_page_image' ? 80 : 35;
+        const size = (node.type === 'pdf_page_image' ? 80 : 35) * camera.zoom;
         const distance = Math.sqrt((x - pos.x) ** 2 + (y - pos.y) ** 2);
         
         if (distance <= size/2) {
-          if (onNodeClick && (node.type === 'pdf_page' || node.type === 'pdf_page_image')) {
+          if (onNodeClick && (node.type === 'pdf_page' || node.type === 'pdf_page_image' || node.type === 'ai_keyword' || node.type === 'consulting_insight')) {
             onNodeClick(node);
           }
           break;
@@ -251,16 +259,33 @@ function Graph3D({ nodes, links, onNodeClick, highlightPath }) {
       }
     };
     
-    // 마우스 호버 이벤트 핸들러
+    // 마우스 이벤트 핸들러 (호버 + 드래그)
     const handleMouseMove = (event) => {
       const rect = canvas.getBoundingClientRect();
       const x = event.clientX - rect.left;
       const y = event.clientY - rect.top;
       
+      // 드래그 중인 경우
+      if (isDragging) {
+        const deltaX = x - dragStart.x;
+        const deltaY = y - dragStart.y;
+        
+        setCamera(prev => ({
+          ...prev,
+          x: prev.x - deltaX / prev.zoom,
+          y: prev.y - deltaY / prev.zoom
+        }));
+        
+        setDragStart({ x, y });
+        canvas.style.cursor = 'grabbing';
+        return;
+      }
+      
+      // 호버 감지
       let foundHover = null;
       for (const node of nodes) {
         const pos = getNormalizedPosition(node);
-        const size = node.type === 'pdf_page_image' ? 80 : 35;
+        const size = (node.type === 'pdf_page_image' ? 80 : 35) * camera.zoom;
         const distance = Math.sqrt((x - pos.x) ** 2 + (y - pos.y) ** 2);
         
         if (distance <= size/2) {
@@ -271,22 +296,73 @@ function Graph3D({ nodes, links, onNodeClick, highlightPath }) {
       }
       
       if (!foundHover) {
-        canvas.style.cursor = 'default';
+        canvas.style.cursor = 'grab';
       }
       
       if (foundHover !== hoveredNode) {
         setHoveredNode(foundHover);
       }
     };
+
+    // 마우스 다운 이벤트 (드래그 시작)
+    const handleMouseDown = (event) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+      
+      setIsDragging(true);
+      setDragStart({ x, y });
+      canvas.style.cursor = 'grabbing';
+    };
+
+    // 마우스 업 이벤트 (드래그 종료)
+    const handleMouseUp = () => {
+      setIsDragging(false);
+      canvas.style.cursor = 'grab';
+    };
+
+    // 휠 이벤트 (줌)
+    const handleWheel = (event) => {
+      event.preventDefault();
+      
+      const rect = canvas.getBoundingClientRect();
+      const mouseX = event.clientX - rect.left;
+      const mouseY = event.clientY - rect.top;
+      
+      // 줌 팩터
+      const zoomFactor = event.deltaY > 0 ? 0.9 : 1.1;
+      const newZoom = Math.max(0.1, Math.min(3, camera.zoom * zoomFactor));
+      
+      // 마우스 위치를 중심으로 줌
+      const centerX = canvasSize.width / 2;
+      const centerY = canvasSize.height / 2;
+      
+      const offsetX = (mouseX - centerX) / camera.zoom;
+      const offsetY = (mouseY - centerY) / camera.zoom;
+      
+      setCamera(prev => ({
+        x: prev.x + offsetX * (1 - zoomFactor),
+        y: prev.y + offsetY * (1 - zoomFactor),
+        zoom: newZoom
+      }));
+    };
     
     canvas.addEventListener('click', handleClick);
     canvas.addEventListener('mousemove', handleMouseMove);
+    canvas.addEventListener('mousedown', handleMouseDown);
+    canvas.addEventListener('mouseup', handleMouseUp);
+    canvas.addEventListener('wheel', handleWheel);
+    canvas.addEventListener('mouseleave', handleMouseUp); // 마우스가 캔버스를 벗어나면 드래그 종료
     
     return () => {
       canvas.removeEventListener('click', handleClick);
       canvas.removeEventListener('mousemove', handleMouseMove);
+      canvas.removeEventListener('mousedown', handleMouseDown);
+      canvas.removeEventListener('mouseup', handleMouseUp);
+      canvas.removeEventListener('wheel', handleWheel);
+      canvas.removeEventListener('mouseleave', handleMouseUp);
     };
-  }, [nodes, links, canvasSize, hoveredNode, highlightPath, onNodeClick]);
+  }, [nodes, links, canvasSize, hoveredNode, highlightPath, onNodeClick, camera, isDragging, dragStart]);
 
   return React.createElement('div', {
     className: 'graph-container',
@@ -360,6 +436,64 @@ function Graph3D({ nodes, links, onNodeClick, highlightPath }) {
         '컨설팅 인사이트'
       )
     ),
+    // 줌/이동 컨트롤
+    React.createElement('div', {
+      style: {
+        position: 'absolute',
+        bottom: '20px',
+        right: '20px',
+        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+        color: 'white',
+        padding: '10px',
+        borderRadius: '8px',
+        fontSize: '12px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '5px',
+        alignItems: 'center'
+      }
+    },
+      React.createElement('div', { style: { display: 'flex', gap: '5px' } },
+        React.createElement('button', {
+          onClick: () => setCamera(prev => ({ ...prev, zoom: Math.min(3, prev.zoom * 1.2) })),
+          style: { 
+            backgroundColor: 'rgba(255,255,255,0.2)', 
+            border: 'none', 
+            color: 'white', 
+            padding: '5px 8px', 
+            borderRadius: '4px',
+            cursor: 'pointer'
+          }
+        }, '+'),
+        React.createElement('button', {
+          onClick: () => setCamera(prev => ({ ...prev, zoom: Math.max(0.1, prev.zoom / 1.2) })),
+          style: { 
+            backgroundColor: 'rgba(255,255,255,0.2)', 
+            border: 'none', 
+            color: 'white', 
+            padding: '5px 8px', 
+            borderRadius: '4px',
+            cursor: 'pointer'
+          }
+        }, '−')
+      ),
+      React.createElement('button', {
+        onClick: () => setCamera({ x: 0, y: 0, zoom: 0.5 }),
+        style: { 
+          backgroundColor: 'rgba(255,255,255,0.2)', 
+          border: 'none', 
+          color: 'white', 
+          padding: '5px 8px', 
+          borderRadius: '4px',
+          cursor: 'pointer',
+          fontSize: '10px'
+        }
+      }, '초기화'),
+      React.createElement('div', { style: { fontSize: '10px', textAlign: 'center' } },
+        `줌: ${(camera.zoom * 100).toFixed(0)}%`
+      )
+    ),
+
     // 안내 메시지
     React.createElement('div', {
       style: {
@@ -373,7 +507,7 @@ function Graph3D({ nodes, links, onNodeClick, highlightPath }) {
         fontSize: '12px'
       }
     },
-      '💡 PDF 페이지를 클릭하면 상세 정보를 볼 수 있습니다'
+      '💡 마우스로 드래그하여 이동 | 휠로 줌 | 노드 클릭으로 상세 정보'
     )
   );
 }
