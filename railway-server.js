@@ -372,6 +372,38 @@ function getMainHTML() {
 const mockNodes = []
 const mockLinks = []
 
+// PDF 페이지 수 추정 함수 (파일 크기, 파일명 등을 고려)
+function estimatePDFPages(uploadData) {
+  const fileName = uploadData.fileName || ''
+  const fileSize = uploadData.fileSize || 0
+  
+  // 파일명 기반 페이지 수 추정
+  if (fileName.includes('롯데케미칼') || fileName.includes('AIDT')) {
+    return 28  // 실제 롯데케미칼 PDF는 28페이지
+  }
+  
+  if (fileName.includes('삼성') || fileName.includes('Samsung')) {
+    // 파일 크기 기반 추정 (일반적으로 1MB당 약 10-15페이지)
+    if (fileSize > 0) {
+      const estimatedBySize = Math.max(10, Math.min(50, Math.ceil(fileSize / (1024 * 1024) * 12)))
+      return estimatedBySize
+    }
+    return 15  // 기본값: 15페이지
+  }
+  
+  // 기타 PDF
+  if (fileSize > 0) {
+    // 파일 크기 기반 추정
+    if (fileSize < 1024 * 1024) return 8        // 1MB 미만: 8페이지
+    if (fileSize < 3 * 1024 * 1024) return 15   // 3MB 미만: 15페이지  
+    if (fileSize < 5 * 1024 * 1024) return 25   // 5MB 미만: 25페이지
+    if (fileSize < 10 * 1024 * 1024) return 40  // 10MB 미만: 40페이지
+    return 60  // 10MB 이상: 60페이지
+  }
+  
+  return 12  // 기본값: 12페이지
+}
+
 // PDF 처리 결과 생성 (파일명 기반 분기)
 function generateMockPDFProcessingResult(uploadData) {
   const startTime = Date.now()
@@ -389,10 +421,14 @@ function generateMockPDFProcessingResult(uploadData) {
 function generateSamsungPDFProcessingResult(uploadData, startTime) {
   const fileName = uploadData.fileName || 'samsung_dx_scm.pdf'
   
-  // PDF 페이지 이미지 노드들 (5개 페이지)
+  // 실제 PDF 페이지 수 추정 (파일 크기 기반)
+  const estimatedPages = estimatePDFPages(uploadData)
+  console.log(`📊 추정 페이지 수: ${estimatedPages}페이지`)
+  
+  // PDF 페이지 이미지 노드들 (추정된 페이지 수만큼 생성)
   const pageImageNodes = []
-  for (let i = 1; i <= 5; i++) {
-    const angle = ((i - 1) / 5) * 2 * Math.PI
+  for (let i = 1; i <= estimatedPages; i++) {
+    const angle = ((i - 1) / estimatedPages) * 2 * Math.PI
     const radius = 600
     
     pageImageNodes.push({
@@ -882,9 +918,33 @@ function getPageTitle(pageNumber) {
     'Agenda',
     '프로젝트 추진 목표',
     '구현 계획',
-    '기대 효과'
+    '기대 효과',
+    '현재 시스템 분석',
+    'AI 기술 스택',
+    '데이터 아키텍처',
+    'Gen AI 활용 방안',
+    'Multi Agent 시스템',
+    'AI Orchestrator 구조',
+    'NSCM 통합 전략',
+    '사용자 경험 개선',
+    '성과 측정 지표',
+    '리스크 관리 방안',
+    '프로젝트 일정',
+    '예산 및 투자 계획',
+    '팀 구성 및 역할',
+    '기술 검증 계획',
+    '파일럿 테스트',
+    '확장 전략',
+    '유지보수 계획',
+    '교육 및 지원',
+    '성공 사례',
+    '벤치마킹',
+    '경쟁 우위',
+    '향후 발전 방향',
+    '결론 및 제언',
+    'Q&A'
   ]
-  return titles[pageNumber - 1] || `페이지 ${pageNumber}`
+  return titles[pageNumber - 1] || `추가 페이지 ${pageNumber - titles.length}`
 }
 
 function getPageText(pageNumber) {
@@ -893,9 +953,33 @@ function getPageText(pageNumber) {
     'I. 제안 개요 II. 수행 범위 III. 사업 관리 IV. 제안사 소개',
     'Gen AI 기반 내/외부 데이터의 업무 활용을 극대화하여 NSCM 시스템의 사용성 제고',
     '3단계 구현 계획: Phase 1, Phase 2, Phase 3',
-    '업무 효율성 향상 및 의사결정 품질 개선'
+    '업무 효율성 향상 및 의사결정 품질 개선',
+    '기존 SCM 시스템의 현황 분석 및 개선 필요 사항 도출',
+    'AI 기술 스택: LLM, RAG, Vector DB, API Gateway 아키텍처',
+    '데이터 레이크, 데이터 웨어하우스, 실시간 데이터 파이프라인 구성',
+    '생성형 AI를 활용한 자연어 기반 데이터 조회 및 분석 시스템',
+    '다중 AI 에이전트 협업을 통한 복합적 업무 처리 자동화',
+    'AI Orchestrator를 통한 워크플로우 관리 및 최적화',
+    'NSCM과의 API 연동 및 데이터 동기화 전략',
+    '직관적 UI/UX 설계를 통한 사용자 경험 혁신',
+    'KPI 및 성과 지표 정의: 효율성, 정확성, 사용자 만족도',
+    '기술적 리스크, 운영 리스크, 보안 리스크 분석 및 대응 방안',
+    '24개월 프로젝트 로드맵: 설계, 개발, 테스트, 배포 단계별 일정',
+    '총 투자비 및 ROI 분석: 개발비, 운영비, 기대 효과',
+    '프로젝트 팀 구성: PM, 아키텍트, 개발자, QA, 운영팀 역할 분담',
+    'PoC, MVP, 파일럿을 통한 단계적 기술 검증 계획',
+    '제한적 사용자 그룹을 통한 파일럿 테스트 및 피드백 수집',
+    '전사 확장을 위한 스케일링 전략 및 인프라 요구사항',
+    '시스템 운영, 모니터링, 성능 최적화를 위한 유지보수 체계',
+    '사용자 교육 프로그램 및 기술 지원 체계 구축',
+    '타 기업 AI 도입 성공 사례 및 레슨런 분석',
+    '글로벌 기업의 Gen AI 활용 사례 및 트렌드 분석',
+    '삼성전자만의 차별화된 AI 역량 및 기술 경쟁력',
+    'AI 기술 발전 방향 및 차세대 시스템 로드맵',
+    '프로젝트 성공을 위한 핵심 요소 및 권고사항',
+    '질의응답 및 추가 논의 사항'
   ]
-  return texts[pageNumber - 1] || `페이지 ${pageNumber} 텍스트`
+  return texts[pageNumber - 1] || `페이지 ${pageNumber}의 상세 내용 및 추가 설명`
 }
 
 // 실제 PDF 페이지 이미지 생성 함수 (Canvas를 사용하여 고품질 이미지 생성)
