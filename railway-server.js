@@ -5,7 +5,29 @@ import { join, extname, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import axios from 'axios'
 import OpenAI from 'openai'
-// import pdfParse from 'pdf-parse'  // 문제가 있어서 비활성화
+
+// Optional dependencies - Railway 환경에서 안전하게 처리
+let pdfParse = null
+let sharp = null
+let canvas = null
+
+try {
+  pdfParse = await import('pdf-parse').then(m => m.default).catch(() => null)
+} catch (e) {
+  console.log('📦 pdf-parse 모듈 로드 실패 (optional dependency)')
+}
+
+try {
+  sharp = await import('sharp').then(m => m.default).catch(() => null)
+} catch (e) {
+  console.log('📦 sharp 모듈 로드 실패 (optional dependency)')
+}
+
+try {
+  canvas = await import('canvas').catch(() => null)
+} catch (e) {
+  console.log('📦 canvas 모듈 로드 실패 (optional dependency)')
+}
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)

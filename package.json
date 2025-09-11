@@ -2,8 +2,8 @@
   "name": "webapp",
   "type": "module",
   "engines": {
-    "node": ">=18.0.0",
-    "npm": ">=8.0.0"
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
   },
   "scripts": {
     "dev": "vite",
@@ -30,27 +30,21 @@
     "@types/react-dom": "^19.1.9",
     "@types/three": "^0.180.0",
     "axios": "^1.11.0",
-    "canvas": "^3.2.0",
-    "d3": "^7.9.0",
+    "axios": "^1.11.0",
     "express": "^4.21.2",
-    "framer-motion": "^12.23.12",
-    "gsap": "^3.13.0",
     "hono": "^4.9.6",
-    "openai": "^5.20.1",
+    "openai": "^5.20.1"
+  },
+  "devDependencies": {
+    "vite": "^6.3.5"
+  },
+  "optionalDependencies": {
+    "canvas": "^3.2.0",
+    "sharp": "^0.34.3",
     "pdf-lib": "^1.17.1",
     "pdf-parse": "^1.1.1",
     "pdf-poppler": "^0.2.1",
     "pdf2pic": "^3.2.0",
-    "pdfjs-dist": "^5.4.149",
-    "react": "^19.1.1",
-    "react-dom": "^19.1.1",
-    "sharp": "^0.34.3",
-    "three": "^0.180.0"
-  },
-  "devDependencies": {
-    "@hono/vite-build": "^1.7.0",
-    "@hono/vite-dev-server": "^0.18.2",
-    "vite": "^6.3.5",
-    "wrangler": "^4.4.0"
+    "pdfjs-dist": "^4.7.76"
   }
 }

@@ -1,20 +1,25 @@
-# Railway 배포용 Dockerfile - 독립 서버 전용
-FROM node:18-alpine
+# Railway 배포용 Dockerfile - Node.js 20으로 업데이트
+FROM node:20-alpine
 
 WORKDIR /app
 
-# Install only runtime dependencies (no build needed)
-COPY package*.json ./
-RUN npm ci --only=production
+# Alpine에서 Python과 build tools 설치 (optional dependencies용)
+RUN apk add --no-cache python3 make g++ cairo-dev pango-dev giflib-dev
 
-# Copy source code and static files
+# package files 복사
+COPY package*.json ./
+
+# 의존성 설치 (optional dependencies 실패해도 계속 진행)
+RUN npm ci --only=production --ignore-optional || npm ci --only=production --no-optional
+
+# 소스 코드 복사
 COPY . .
 
-# Create dist directory (no build processes needed)
+# dist 디렉토리 생성
 RUN mkdir -p dist
 
-# Expose port
+# 포트 노출
 EXPOSE 3000
 
-# Start command for Railway - use independent server
+# Railway 시작 명령어
 CMD ["node", "railway-server.js"]
