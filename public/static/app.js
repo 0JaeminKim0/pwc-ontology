@@ -22,13 +22,30 @@ function Graph3D({ nodes, links, onNodeClick, highlightPath }) {
     renderer.setClearColor(0x000000, 0);
     mountRef.current.appendChild(renderer.domElement);
 
-    // Lighting
-    const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+    // 향상된 조명 시스템
+    const ambientLight = new THREE.AmbientLight(0x404040, 0.4);
     scene.add(ambientLight);
     
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    directionalLight.position.set(50, 50, 50);
-    scene.add(directionalLight);
+    // 메인 직사광
+    const mainLight = new THREE.DirectionalLight(0xffffff, 1.0);
+    mainLight.position.set(50, 100, 50);
+    mainLight.castShadow = true;
+    scene.add(mainLight);
+    
+    // 보조광 1
+    const fillLight = new THREE.DirectionalLight(0xffffff, 0.6);
+    fillLight.position.set(-50, 50, -50);
+    scene.add(fillLight);
+    
+    // 보조광 2 (색감 추가)
+    const colorLight = new THREE.DirectionalLight(0xe31e24, 0.3);
+    colorLight.position.set(0, -50, 100);
+    scene.add(colorLight);
+    
+    // 포인트 라이트 (롯데 브랜드 컴러)
+    const pointLight = new THREE.PointLight(0xe31e24, 0.8, 1000);
+    pointLight.position.set(0, 200, 200);
+    scene.add(pointLight);
 
     // Controls for orbit - 카메라를 적당히 멀리 배치
     camera.position.set(0, 0, 900);
@@ -148,61 +165,129 @@ function Graph3D({ nodes, links, onNodeClick, highlightPath }) {
       let geometry;
       let material;
       
-      // PDF 페이지 이미지 노드 특별 처리
+      // PDF 페이지 이미지 노드 특별 처리 - 시각성 강화
       if (node.type === 'pdf_page_image' && node.imageDataUrl) {
-        // 페이지 이미지를 텍스처로 사용하는 평면 지오메트리
+        // 더 큰 크기로 잘 보이도록 조정
         const aspectRatio = node.aspectRatio || 1.0;
-        const width = 40;
+        const width = 80;  // 40 → 80 (2배 확대)
         const height = width / aspectRatio;
         
-        geometry = new THREE.PlaneGeometry(width, height);
+        // 입체감 있는 박스 지오메트리로 변경
+        geometry = new THREE.BoxGeometry(width, height, 8);
         
-        // 이미지 텍스처 생성
-        const texture = new THREE.TextureLoader().load(
-          node.imageDataUrl,
-          (loadedTexture) => {
-            // 텍스처 로드 완료 시 추가 설정
-            loadedTexture.minFilter = THREE.LinearFilter;
-            loadedTexture.magFilter = THREE.LinearFilter;
-          }
-        );
+        // 고대비 텍스처 생성
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = 512;
+        canvas.height = 512 / aspectRatio;
+        
+        // 배경 그리데이션 (롯데케미칼 브랜드 컴러)
+        const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        gradient.addColorStop(0, '#e31e24');  // 롯데 빨간
+        gradient.addColorStop(0.3, '#ffffff'); // 하얀
+        gradient.addColorStop(1, '#f8f9fa');  // 연한 회색
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // 테두리 강화
+        ctx.strokeStyle = '#e31e24';
+        ctx.lineWidth = 6;
+        ctx.strokeRect(0, 0, canvas.width, canvas.height);
+        
+        // 타이틀 영역
+        ctx.fillStyle = '#e31e24';
+        ctx.fillRect(10, 10, canvas.width - 20, 60);
+        
+        // 롯데케미칼 로고
+        ctx.fillStyle = 'white';
+        ctx.font = 'bold 24px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('롯데케미칼 AI/DT', canvas.width/2, 45);
+        
+        // 페이지 번호
+        ctx.fillStyle = '#2c3e50';
+        ctx.font = 'bold 48px Arial';
+        ctx.fillText(`페이지 ${node.pageNumber}`, canvas.width/2, canvas.height/2);
+        
+        // 서브 타이틀
+        ctx.fillStyle = '#666';
+        ctx.font = '18px Arial';
+        const title = node.metadata?.title || node.label;
+        const maxWidth = canvas.width - 40;
+        ctx.fillText(title.length > 30 ? title.substring(0, 30) + '...' : title, canvas.width/2, canvas.height/2 + 60);
+        
+        // 바닥 정보
+        ctx.fillStyle = '#999';
+        ctx.font = '14px Arial';
+        ctx.fillText('현장 중심 AI/DT 로드맵', canvas.width/2, canvas.height - 30);
+        
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.minFilter = THREE.LinearFilter;
+        texture.magFilter = THREE.LinearFilter;
         
         material = new THREE.MeshLambertMaterial({ 
           map: texture,
-          transparent: true,
-          opacity: node.isNew ? 0.8 : 1.0
+          transparent: false,
+          opacity: 1.0
         });
       } else {
-        // 기존 노드 타입별 지오메트리
+        // 기존 노드 타입별 지오메트리 - 크기 확대 및 시각적 개선
         switch (node.type) {
+          case 'ai_keyword':
+            // AI 키워드 - 빨간색 다이아몬드 모양
+            geometry = new THREE.OctahedronGeometry(15);
+            break;
+          case 'consulting_insight':
+            // 컨설팅 인사이트 - 주황색 육각형
+            geometry = new THREE.CylinderGeometry(12, 12, 20);
+            break;
           case 'organization':
-            geometry = new THREE.OctahedronGeometry(8);
+            geometry = new THREE.OctahedronGeometry(12);
             break;
           case 'service':
-            geometry = new THREE.BoxGeometry(12, 12, 12);
+            geometry = new THREE.BoxGeometry(16, 16, 16);
             break;
           case 'capability':
-            geometry = new THREE.CylinderGeometry(6, 6, 12);
+            geometry = new THREE.CylinderGeometry(10, 10, 18);
             break;
           case 'technology':
-            geometry = new THREE.TetrahedronGeometry(10);
+            geometry = new THREE.TetrahedronGeometry(14);
             break;
           case 'deliverable':
-            geometry = new THREE.SphereGeometry(8);
+            geometry = new THREE.SphereGeometry(12);
             break;
           case 'pdf_page':
             // 기존 PDF 페이지 노드 (텍스트 기반)
-            geometry = new THREE.BoxGeometry(20, 15, 2);
+            geometry = new THREE.BoxGeometry(30, 22, 4);
             break;
           default:
-            geometry = new THREE.SphereGeometry(6);
+            geometry = new THREE.SphereGeometry(10);
         }
 
-        material = new THREE.MeshLambertMaterial({ 
-          color: node.color,
-          transparent: true,
-          opacity: node.isNew ? 0.8 : 1.0
-        });
+        // 노드 타입별 매테리얼 최적화
+        if (node.type === 'ai_keyword') {
+          material = new THREE.MeshPhongMaterial({ 
+            color: node.color || '#e74c3c',
+            transparent: true,
+            opacity: 0.9,
+            shininess: 100,
+            emissive: new THREE.Color('#330000')
+          });
+        } else if (node.type === 'consulting_insight') {
+          material = new THREE.MeshPhongMaterial({ 
+            color: node.color || '#f39c12',
+            transparent: true,
+            opacity: 0.9,
+            shininess: 80,
+            emissive: new THREE.Color('#331a00')
+          });
+        } else {
+          material = new THREE.MeshLambertMaterial({ 
+            color: node.color,
+            transparent: true,
+            opacity: node.isNew ? 0.8 : 1.0
+          });
+        }
       }
       
       const mesh = new THREE.Mesh(geometry, material);
@@ -219,8 +304,42 @@ function Graph3D({ nodes, links, onNodeClick, highlightPath }) {
         };
       }
 
-      // Add glow effect for new nodes
-      if (node.isNew) {
+      // PDF 이미지 노드에 강화된 이팩트 추가
+      if (node.type === 'pdf_page_image') {
+        // 밝은 테두리 글로우
+        const edgeGeometry = new THREE.EdgesGeometry(geometry);
+        const edgeMaterial = new THREE.LineBasicMaterial({ 
+          color: '#e31e24', 
+          linewidth: 3,
+          transparent: true,
+          opacity: 0.8
+        });
+        const edgeMesh = new THREE.LineSegments(edgeGeometry, edgeMaterial);
+        mesh.add(edgeMesh);
+        
+        // 파티클 이팩트
+        const particleGeometry = new THREE.SphereGeometry(1, 8, 8);
+        const particleMaterial = new THREE.MeshBasicMaterial({ 
+          color: '#e31e24',
+          transparent: true,
+          opacity: 0.6
+        });
+        
+        for (let i = 0; i < 8; i++) {
+          const particle = new THREE.Mesh(particleGeometry, particleMaterial);
+          const angle = (i / 8) * Math.PI * 2;
+          const radius = 50;
+          particle.position.set(
+            Math.cos(angle) * radius,
+            Math.sin(angle) * radius,
+            (Math.random() - 0.5) * 20
+          );
+          mesh.add(particle);
+        }
+      }
+      
+      // Add glow effect for new nodes (AI 키워드, 컨설팅 인사이트)
+      if (node.isNew && node.type !== 'pdf_page_image') {
         const glowGeometry = geometry.clone();
         const glowMaterial = new THREE.MeshBasicMaterial({
           color: node.color || '#ffffff',
@@ -245,40 +364,66 @@ function Graph3D({ nodes, links, onNodeClick, highlightPath }) {
       groupRef.current.add(mesh);
       nodeObjectsRef.current.set(node.id, mesh);
 
-      // Add text label (PDF 이미지 노드의 경우 페이지 번호만 표시)
-      const canvas = document.createElement('canvas');
-      const context = canvas.getContext('2d');
-      canvas.width = 256;
-      canvas.height = 64;
-      
-      context.fillStyle = 'rgba(0, 0, 0, 0.8)';
-      context.fillRect(0, 0, canvas.width, canvas.height);
-      
-      context.fillStyle = 'white';
-      context.font = '16px Arial';
-      context.textAlign = 'center';
-      
-      let labelText = node.label;
-      if (node.type === 'pdf_page_image' && node.pageNumber) {
-        labelText = `페이지 ${node.pageNumber}`;
-      }
-      
-      context.fillText(labelText, canvas.width / 2, canvas.height / 2 + 6);
-
-      const labelTexture = new THREE.CanvasTexture(canvas);
-      const spriteMaterial = new THREE.SpriteMaterial({ map: labelTexture });
-      const sprite = new THREE.Sprite(spriteMaterial);
-      
-      // PDF 이미지 노드의 경우 라벨을 아래쪽에 배치
+      // 향상된 텍스트 라벨 (더 크고 선명하게)
       if (node.type === 'pdf_page_image') {
-        const height = 40 / (node.aspectRatio || 1.0);
-        sprite.position.set(0, -(height/2 + 15), 0);
+        // PDF 이미지 노드는 3D 라벨 사용
+        const labelCanvas = document.createElement('canvas');
+        const labelCtx = labelCanvas.getContext('2d');
+        labelCanvas.width = 400;
+        labelCanvas.height = 100;
+        
+        // 그리데이션 배경
+        const labelGradient = labelCtx.createLinearGradient(0, 0, 0, labelCanvas.height);
+        labelGradient.addColorStop(0, 'rgba(227, 30, 36, 0.9)');
+        labelGradient.addColorStop(1, 'rgba(227, 30, 36, 0.7)');
+        labelCtx.fillStyle = labelGradient;
+        labelCtx.fillRect(0, 0, labelCanvas.width, labelCanvas.height);
+        
+        // 테두리
+        labelCtx.strokeStyle = '#e31e24';
+        labelCtx.lineWidth = 3;
+        labelCtx.strokeRect(0, 0, labelCanvas.width, labelCanvas.height);
+        
+        // 텍스트
+        labelCtx.fillStyle = 'white';
+        labelCtx.font = 'bold 24px Arial';
+        labelCtx.textAlign = 'center';
+        labelCtx.shadowColor = 'rgba(0,0,0,0.5)';
+        labelCtx.shadowBlur = 3;
+        labelCtx.fillText(`PAGE ${node.pageNumber}`, labelCanvas.width / 2, 35);
+        
+        labelCtx.font = '16px Arial';
+        const title = node.metadata?.title || node.label;
+        const shortTitle = title.length > 25 ? title.substring(0, 25) + '...' : title;
+        labelCtx.fillText(shortTitle, labelCanvas.width / 2, 65);
+        
+        const labelTexture = new THREE.CanvasTexture(labelCanvas);
+        const labelSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: labelTexture }));
+        labelSprite.position.set(0, -60, 0);
+        labelSprite.scale.set(80, 20, 1);
+        mesh.add(labelSprite);
       } else {
+        // 다른 노드 타입에 대한 기존 라벨
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        canvas.width = 256;
+        canvas.height = 64;
+        
+        context.fillStyle = 'rgba(0, 0, 0, 0.8)';
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        
+        context.fillStyle = 'white';
+        context.font = '16px Arial';
+        context.textAlign = 'center';
+        context.fillText(node.label, canvas.width / 2, canvas.height / 2 + 6);
+
+        const labelTexture = new THREE.CanvasTexture(canvas);
+        const spriteMaterial = new THREE.SpriteMaterial({ map: labelTexture });
+        const sprite = new THREE.Sprite(spriteMaterial);
         sprite.position.set(0, 20, 0);
+        sprite.scale.set(40, 10, 1);
+        mesh.add(sprite);
       }
-      
-      sprite.scale.set(40, 10, 1);
-      mesh.add(sprite);
     });
 
     // Create links
