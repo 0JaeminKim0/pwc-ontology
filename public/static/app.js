@@ -724,185 +724,326 @@ function StatusBar({ nodeCount, linkCount, lastUpdate }) {
   );
 }
 
-// PDF Page Detail Modal Component (지원: 텍스트 + 이미지 모드)
+// Enhanced PDF Page Modal with Image Display
 function PDFPageModal({ page, onClose }) {
   if (!page) return null;
 
-  // PDF 이미지 모드인지 확인
-  const isImageMode = page.type === 'pdf_page_image';
-  const pageData = isImageMode ? page.metadata : page;
-  const displayTitle = isImageMode ? (pageData?.title || `페이지 ${page.pageNumber}`) : page.title;
-  const displayWordCount = isImageMode ? (pageData?.wordCount || 0) : page.wordCount;
-  const displayConfidence = isImageMode ? (pageData?.confidence || 0) : page.confidence;
+  // 노드 타입별 데이터 처리
+  const getNodeDisplayData = (node) => {
+    switch (node.type) {
+      case 'pdf_page_image':
+        return {
+          title: node.metadata?.title || `페이지 ${node.pageNumber}`,
+          type: 'PDF 페이지 이미지',
+          icon: 'fas fa-image text-purple-600',
+          confidence: node.metadata?.confidence || 0,
+          content: node.metadata?.extractedText || '텍스트 추출 중...',
+          summary: node.metadata?.summary || '요약 생성 중...',
+          keywords: node.metadata?.keywords || [],
+          imageUrl: generatePDFPageImage(node.pageNumber, node.documentTitle),
+          metadata: {
+            size: `${node.width} x ${node.height}`,
+            aspectRatio: node.aspectRatio?.toFixed(2),
+            wordCount: node.metadata?.wordCount || 0,
+            pageType: node.metadata?.pageType || 'content',
+            hasTitle: node.metadata?.hasTitle || false,
+            hasImages: node.metadata?.hasImages || false,
+            hasTables: node.metadata?.hasTables || false,
+            hasCharts: node.metadata?.hasCharts || false
+          }
+        };
+      
+      case 'ai_keyword':
+        return {
+          title: node.label,
+          type: 'AI 키워드',
+          icon: 'fas fa-robot text-red-600',
+          confidence: node.confidence || 0,
+          content: `AI 기술 키워드: ${node.label}`,
+          summary: node.metadata?.description || 'AI 관련 핵심 키워드입니다.',
+          keywords: [node.label],
+          imageUrl: generatePDFPageImage(node.metadata?.sourcePageNumber || 1, node.metadata?.documentTitle),
+          metadata: {
+            category: node.metadata?.category || 'AI Technology',
+            extractedFrom: node.metadata?.extractedFrom || 'PDF 자동 분석',
+            relevance: node.metadata?.relevance || 'High',
+            frequency: node.metadata?.frequency || 1,
+            relatedConcepts: node.metadata?.relatedConcepts || []
+          }
+        };
+      
+      case 'consulting_insight':
+        return {
+          title: node.label,
+          type: '컨설팅 인사이트',
+          icon: 'fas fa-lightbulb text-orange-600',
+          confidence: node.confidence || 0,
+          content: `컨설팅 인사이트: ${node.label}`,
+          summary: node.metadata?.description || '비즈니스 전략 관련 핵심 인사이트입니다.',
+          keywords: [node.label],
+          imageUrl: generatePDFPageImage(node.metadata?.sourcePageNumber || 1, node.metadata?.documentTitle),
+          metadata: {
+            impact: node.metadata?.impact || 'High',
+            category: node.metadata?.category || 'Business Strategy',
+            extractedFrom: node.metadata?.extractedFrom || 'PDF 자동 분석',
+            businessValue: node.metadata?.businessValue || 'Strategic',
+            implementationLevel: node.metadata?.implementationLevel || 'Executive'
+          }
+        };
+      
+      default:
+        return {
+          title: node.label || node.id,
+          type: '일반 노드',
+          icon: 'fas fa-circle text-blue-600',
+          confidence: node.confidence || 0,
+          content: node.content || node.label || '내용 없음',
+          summary: node.summary || '요약 없음',
+          keywords: node.keywords || [],
+          imageUrl: null,
+          metadata: {}
+        };
+    }
+  };
+
+  // PDF 페이지 이미지 생성 함수
+  const generatePDFPageImage = (pageNumber, documentTitle) => {
+    if (!pageNumber) return null;
+    
+    // Canvas를 사용해서 모의 PDF 페이지 이미지 생성
+    const canvas = document.createElement('canvas');
+    canvas.width = 600;
+    canvas.height = 800;
+    const ctx = canvas.getContext('2d');
+    
+    // 배경
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, 600, 800);
+    
+    // 문서 제목에 따른 브랜드 컬러 설정
+    let brandColor = '#e31e24'; // 롯데케미칼 기본
+    if (documentTitle?.includes('삼성') || documentTitle?.includes('Samsung')) {
+      brandColor = '#1428a0'; // 삼성 블루
+    }
+    
+    // 헤더 영역
+    ctx.fillStyle = brandColor;
+    ctx.fillRect(0, 0, 600, 80);
+    
+    // 헤더 텍스트
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 24px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(documentTitle || 'PDF 문서', 300, 50);
+    
+    // 페이지 번호
+    ctx.fillStyle = '#000000';
+    ctx.font = '16px Arial';
+    ctx.textAlign = 'right';
+    ctx.fillText(`페이지 ${pageNumber}`, 550, 120);
+    
+    // 본문 영역 시뮬레이션
+    ctx.fillStyle = '#333333';
+    ctx.font = '14px Arial';
+    ctx.textAlign = 'left';
+    
+    // 제목
+    ctx.font = 'bold 20px Arial';
+    ctx.fillText('문서 내용', 50, 180);
+    
+    // 본문 텍스트 라인들
+    const lines = [
+      '이 문서는 PDF에서 추출된 내용을 보여줍니다.',
+      '실제 환경에서는 PDF.js를 사용하여',
+      '실제 PDF 페이지 이미지를 렌더링합니다.',
+      '',
+      '주요 특징:',
+      '• AI 키워드 자동 추출',
+      '• 컨설팅 인사이트 식별',
+      '• 메타데이터 자동 생성',
+      '• 페이지별 상세 분석'
+    ];
+    
+    ctx.font = '14px Arial';
+    lines.forEach((line, index) => {
+      ctx.fillText(line, 50, 220 + (index * 25));
+    });
+    
+    // 하단 브랜드 영역
+    ctx.fillStyle = brandColor;
+    ctx.fillRect(0, 720, 600, 80);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 16px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('PwC 온톨로지 자동 구축 시스템', 300, 765);
+    
+    return canvas.toDataURL('image/png');
+  };
+
+  const displayData = getNodeDisplayData(page);
 
   return React.createElement('div', {
-    className: 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50',
+    className: 'fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4',
     onClick: onClose
   },
     React.createElement('div', {
-      className: 'bg-white rounded-lg p-6 max-w-6xl max-h-[90vh] overflow-y-auto',
+      className: 'bg-white rounded-xl shadow-2xl max-w-7xl w-full max-h-[95vh] overflow-hidden',
       onClick: (e) => e.stopPropagation()
     },
-      // Header
-      React.createElement('div', { className: 'flex justify-between items-start mb-4' },
-        React.createElement('div', null,
-          React.createElement('h2', { className: 'text-2xl font-bold text-gray-800 flex items-center gap-2' },
-            isImageMode ? 
-              React.createElement('i', { className: 'fas fa-image text-purple-600' }) :
-              React.createElement('i', { className: 'fas fa-file-alt text-blue-600' }),
-            `페이지 ${page.pageNumber}: ${displayTitle}`
-          ),
-          React.createElement('p', { className: 'text-gray-600 mt-1' },
-            isImageMode ? 
-              `이미지 크기: ${page.width} x ${page.height} | 종횡비: ${page.aspectRatio?.toFixed(2)} | 신뢰도: ${(displayConfidence * 100).toFixed(0)}%` :
-              `${displayWordCount}단어 | 신뢰도: ${(displayConfidence * 100).toFixed(0)}%`
-          )
-        ),
-        React.createElement('button', {
-          onClick: onClose,
-          className: 'text-gray-500 hover:text-gray-700 text-2xl'
-        }, '×')
-      ),
-
-      // Content - 이미지 모드와 텍스트 모드 구분
-      isImageMode ? 
-      // 이미지 모드 레이아웃
-      React.createElement('div', { className: 'grid grid-cols-1 lg:grid-cols-2 gap-6' },        
-        // 메타데이터 (오른쪽)
-        React.createElement('div', { className: 'lg:col-span-2' },
-          React.createElement('h3', { className: 'text-lg font-semibold mb-2' }, '추출된 텍스트'),
-          React.createElement('div', { 
-            className: 'bg-gray-50 p-4 rounded border max-h-40 overflow-y-auto text-sm mb-4'
-          }, pageData?.extractedText || '텍스트 추출 중...'),
-          
-          React.createElement('h3', { className: 'text-lg font-semibold mb-2' }, '요약'),
-          React.createElement('p', { className: 'text-gray-700 mb-4' }, pageData?.summary || '요약 생성 중...'),
-          
-          React.createElement('h3', { className: 'text-lg font-semibold mb-2' }, '키워드'),
-          React.createElement('div', { className: 'flex flex-wrap gap-2 mb-4' },
-            ...(pageData?.keywords || []).map((keyword, index) =>
-              React.createElement('span', {
-                key: index,
-                className: 'px-2 py-1 bg-purple-100 text-purple-800 rounded text-sm'
-              }, keyword)
+      // 새로운 통합 레이아웃
+      React.createElement('div', { className: 'flex flex-col h-full' },
+        // Header
+        React.createElement('div', { className: 'flex justify-between items-start p-6 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-blue-50' },
+          React.createElement('div', { className: 'flex-1' },
+            React.createElement('div', { className: 'flex items-center gap-3 mb-2' },
+              React.createElement('i', { className: displayData.icon }),
+              React.createElement('h2', { className: 'text-2xl font-bold text-gray-800' },
+                displayData.title
+              ),
+              React.createElement('span', { 
+                className: `px-3 py-1 rounded-full text-sm font-medium ${
+                  page.type === 'pdf_page_image' ? 'bg-purple-100 text-purple-800' :
+                  page.type === 'ai_keyword' ? 'bg-red-100 text-red-800' :
+                  page.type === 'consulting_insight' ? 'bg-orange-100 text-orange-800' :
+                  'bg-blue-100 text-blue-800'
+                }`
+              }, displayData.type)
+            ),
+            React.createElement('div', { className: 'flex items-center gap-6 text-sm text-gray-600' },
+              page.pageNumber && React.createElement('span', null, `페이지 ${page.pageNumber}`),
+              React.createElement('span', null, `신뢰도: ${(displayData.confidence * 100).toFixed(0)}%`),
+              displayData.metadata.size && React.createElement('span', null, `크기: ${displayData.metadata.size}`)
             )
           ),
-          
-          // 페이지 타입과 특성
-          React.createElement('div', { className: 'grid grid-cols-2 gap-4 text-sm' },
-            React.createElement('div', null,
-              React.createElement('h4', { className: 'font-medium mb-1' }, '페이지 타입'),
-              React.createElement('span', { className: 'px-2 py-1 bg-blue-100 text-blue-800 rounded' }, 
-                pageData?.pageType || 'content'
+          React.createElement('button', {
+            onClick: onClose,
+            className: 'text-gray-400 hover:text-gray-600 text-3xl font-light p-2'
+          }, '×')
+        ),
+
+        // Main Content
+        React.createElement('div', { className: 'flex-1 overflow-hidden' },
+          React.createElement('div', { className: 'grid grid-cols-1 lg:grid-cols-2 gap-0 h-full' },
+            // Left: PDF Image
+            React.createElement('div', { className: 'bg-gray-100 flex items-center justify-center p-6 border-r border-gray-200' },
+              displayData.imageUrl ? React.createElement('div', { className: 'max-w-full max-h-full' },
+                React.createElement('img', {
+                  src: displayData.imageUrl,
+                  alt: `PDF Page ${page.pageNumber}`,
+                  className: 'max-w-full max-h-full object-contain rounded-lg shadow-lg border border-gray-300',
+                  style: { maxHeight: '70vh' }
+                })
+              ) : React.createElement('div', { className: 'text-center text-gray-500' },
+                React.createElement('i', { className: 'fas fa-image text-6xl mb-4 text-gray-300' }),
+                React.createElement('p', { className: 'text-lg' }, 'PDF 이미지 로딩 중...')
               )
             ),
-            React.createElement('div', null,
-              React.createElement('h4', { className: 'font-medium mb-1' }, '단어 수'),
-              React.createElement('span', { className: 'font-mono' }, `${pageData?.wordCount || 0}개`)
-            )
-          ),
-          
-          // 페이지 특성
-          pageData && React.createElement('div', { className: 'mt-4' },
-            React.createElement('h4', { className: 'text-sm font-medium mb-2' }, '페이지 특성'),
-            React.createElement('div', { className: 'flex flex-wrap gap-2' },
-              pageData.hasTitle && React.createElement('span', {
-                className: 'px-2 py-1 bg-green-100 text-green-700 rounded text-xs'
-              }, '제목 있음'),
-              pageData.hasImages && React.createElement('span', {
-                className: 'px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs'
-              }, '이미지 있음'),
-              pageData.hasTables && React.createElement('span', {
-                className: 'px-2 py-1 bg-yellow-100 text-yellow-700 rounded text-xs'
-              }, '표 있음'),
-              pageData.hasCharts && React.createElement('span', {
-                className: 'px-2 py-1 bg-red-100 text-red-700 rounded text-xs'
-              }, '차트 있음')
-            )
-          )
-        )
-      ) :
-      // 기존 텍스트 모드 레이아웃
-      React.createElement('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-6' },
-        // Left column - Content
-        React.createElement('div', null,
-          React.createElement('h3', { className: 'text-lg font-semibold mb-2' }, '페이지 내용'),
-          React.createElement('div', { 
-            className: 'bg-gray-50 p-4 rounded border max-h-60 overflow-y-auto text-sm'
-          }, page.content),
-          
-          React.createElement('h3', { className: 'text-lg font-semibold mt-4 mb-2' }, '요약'),
-          React.createElement('p', { className: 'text-gray-700' }, page.summary)
-        ),
 
-        // Right column - Metadata
-        React.createElement('div', null,
-          React.createElement('h3', { className: 'text-lg font-semibold mb-2' }, '키워드'),
-          React.createElement('div', { className: 'flex flex-wrap gap-2 mb-4' },
-            ...(page.keywords || []).map((keyword, index) =>
-              React.createElement('span', {
-                key: index,
-                className: 'px-2 py-1 bg-blue-100 text-blue-800 rounded text-sm'
-              }, keyword)
-            )
-          ),
-
-          // Images (텍스트 모드에서만)
-          page.images && page.images.length > 0 && React.createElement('div', { className: 'mb-4' },
-            React.createElement('h3', { className: 'text-lg font-semibold mb-2' }, 
-              `이미지 (${page.images.length}개)`
-            ),
-            React.createElement('div', { className: 'space-y-2' },
-              ...page.images.map((img, index) =>
-                React.createElement('div', {
-                  key: index,
-                  className: 'p-2 bg-yellow-50 rounded border border-yellow-200'
-                },
-                  React.createElement('div', { className: 'text-sm font-medium' }, img.description),
-                  React.createElement('div', { className: 'text-xs text-gray-600' }, `타입: ${img.type}`)
+            // Right: Metadata
+            React.createElement('div', { className: 'p-6 overflow-y-auto bg-white' },
+              // 요약 섹션
+              React.createElement('div', { className: 'mb-6' },
+                React.createElement('h3', { className: 'text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2' },
+                  React.createElement('i', { className: 'fas fa-align-left text-blue-600' }),
+                  '요약'
+                ),
+                React.createElement('p', { className: 'text-gray-700 leading-relaxed bg-blue-50 p-4 rounded-lg' },
+                  displayData.summary
                 )
-              )
-            )
-          ),
+              ),
 
-          // Tables (텍스트 모드에서만)
-          page.tables && page.tables.length > 0 && React.createElement('div', null,
-            React.createElement('h3', { className: 'text-lg font-semibold mb-2' }, 
-              `표 (${page.tables.length}개)`
-            ),
-            React.createElement('div', { className: 'space-y-2' },
-              ...page.tables.map((table, index) =>
-                React.createElement('div', {
-                  key: index,
-                  className: 'p-2 bg-green-50 rounded border border-green-200'
-                },
-                  React.createElement('div', { className: 'text-sm font-medium' }, 
-                    `${table.headers.length}개 컬럼 표`
-                  ),
-                  React.createElement('div', { className: 'text-xs text-gray-600' },
-                    `헤더: ${table.headers.join(', ')}`
+              // 추출된 텍스트
+              React.createElement('div', { className: 'mb-6' },
+                React.createElement('h3', { className: 'text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2' },
+                  React.createElement('i', { className: 'fas fa-file-text text-green-600' }),
+                  '추출된 텍스트'
+                ),
+                React.createElement('div', { 
+                  className: 'bg-gray-50 p-4 rounded-lg border max-h-48 overflow-y-auto text-sm text-gray-700'
+                }, displayData.content)
+              ),
+
+              // 키워드
+              React.createElement('div', { className: 'mb-6' },
+                React.createElement('h3', { className: 'text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2' },
+                  React.createElement('i', { className: 'fas fa-tags text-purple-600' }),
+                  '키워드'
+                ),
+                React.createElement('div', { className: 'flex flex-wrap gap-2' },
+                  ...displayData.keywords.map((keyword, index) =>
+                    React.createElement('span', {
+                      key: index,
+                      className: `px-3 py-1 rounded-full text-sm font-medium ${
+                        page.type === 'ai_keyword' ? 'bg-red-100 text-red-800' :
+                        page.type === 'consulting_insight' ? 'bg-orange-100 text-orange-800' :
+                        'bg-purple-100 text-purple-800'
+                      }`
+                    }, keyword)
                   )
                 )
+              ),
+
+              // 메타데이터
+              React.createElement('div', { className: 'mb-6' },
+                React.createElement('h3', { className: 'text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2' },
+                  React.createElement('i', { className: 'fas fa-info-circle text-indigo-600' }),
+                  '상세 정보'
+                ),
+                React.createElement('div', { className: 'space-y-3' },
+                  ...Object.entries(displayData.metadata).map(([key, value]) => 
+                    value && React.createElement('div', {
+                      key: key,
+                      className: 'flex justify-between items-center py-2 px-3 bg-gray-50 rounded'
+                    },
+                      React.createElement('span', { className: 'font-medium text-gray-600 capitalize' }, 
+                        key.replace(/([A-Z])/g, ' $1').trim()
+                      ),
+                      React.createElement('span', { className: 'text-gray-800' },
+                        typeof value === 'boolean' ? (value ? '있음' : '없음') : 
+                        Array.isArray(value) ? value.join(', ') : value
+                      )
+                    )
+                  )
+                )
+              ),
+
+              // 페이지 특성 (PDF 이미지인 경우)
+              page.type === 'pdf_page_image' && React.createElement('div', null,
+                React.createElement('h3', { className: 'text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2' },
+                  React.createElement('i', { className: 'fas fa-check-circle text-green-600' }),
+                  '페이지 특성'
+                ),
+                React.createElement('div', { className: 'flex flex-wrap gap-2' },
+                  displayData.metadata.hasTitle && React.createElement('span', {
+                    className: 'px-2 py-1 bg-green-100 text-green-700 rounded text-sm'
+                  }, '📝 제목 있음'),
+                  displayData.metadata.hasImages && React.createElement('span', {
+                    className: 'px-2 py-1 bg-blue-100 text-blue-700 rounded text-sm'
+                  }, '🖼️ 이미지 있음'),
+                  displayData.metadata.hasTables && React.createElement('span', {
+                    className: 'px-2 py-1 bg-yellow-100 text-yellow-700 rounded text-sm'
+                  }, '📊 표 있음'),
+                  displayData.metadata.hasCharts && React.createElement('span', {
+                    className: 'px-2 py-1 bg-red-100 text-red-700 rounded text-sm'
+                  }, '📈 차트 있음')
+                )
               )
             )
           )
-        )
-      ),
+        ),
 
-      // Footer
-      React.createElement('div', { className: 'mt-6 pt-4 border-t border-gray-200' },
-        React.createElement('p', { className: 'text-sm text-gray-600 flex items-center gap-4' },
-          React.createElement('span', null,
-            `문서: ${isImageMode ? (page.documentTitle || 'PDF 문서') : page.documentTitle}`
-          ),
-          React.createElement('span', null, '|'),
-          React.createElement('span', null,
-            `생성 시간: ${new Date().toLocaleString()}`
-          ),
-          isImageMode && React.createElement('span', null, '|'),
-          isImageMode && React.createElement('span', {
-            className: 'px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs'
-          }, '이미지 모드')
+        // Footer
+        React.createElement('div', { className: 'p-4 border-t border-gray-200 bg-gray-50' },
+          React.createElement('div', { className: 'flex justify-between items-center text-sm text-gray-600' },
+            React.createElement('div', { className: 'flex items-center gap-4' },
+              React.createElement('span', null, `📄 문서: ${page.documentTitle || 'PDF 문서'}`),
+              React.createElement('span', null, `⏰ ${new Date().toLocaleString()}`)
+            ),
+            React.createElement('div', { className: 'flex items-center gap-2' },
+              React.createElement('span', null, 'PwC 온톨로지 자동 구축 시스템'),
+              React.createElement('i', { className: 'fas fa-robot text-blue-600' })
+            )
+          )
         )
       )
     )
