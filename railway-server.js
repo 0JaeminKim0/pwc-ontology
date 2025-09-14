@@ -935,6 +935,15 @@ async function convertRealPDFToImage(pdfBuffer, pageNumber, documentTitle = '') 
   try {
     console.log(`🎨 실제 PDF 페이지 ${pageNumber} 이미지 변환 중... (${pdfBuffer.length} bytes)`)
     
+    // ImageMagick 설치 여부 먼저 확인
+    try {
+      execSync('convert --version', { timeout: 3000, stdio: 'ignore' })
+      console.log('✅ ImageMagick 설치 확인됨')
+    } catch (checkError) {
+      console.log('❌ ImageMagick 미설치 감지 - 즉시 fallback 사용')
+      throw new Error('ImageMagick not available - using fallback')
+    }
+    
     // 임시 파일 경로
     const tempDir = './temp'
     const tempPdfPath = join(tempDir, `temp_pdf_${Date.now()}_${pageNumber}.pdf`)

@@ -1,0 +1,8 @@
+[phases.setup]
+nixPkgs = ['imagemagick', 'ghostscript']
+
+[phases.build]
+cmds = ['npm ci']
+
+[phases.start]
+cmd = 'npm run start'
