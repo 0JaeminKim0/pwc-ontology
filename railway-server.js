@@ -70,6 +70,21 @@ try {
   console.log('📦 canvas 모듈 로드 실패 (optional dependency)')
 }
 
+// PDF.js 로드 시도 (ImageMagick 대체)
+let pdfjs = null
+try {
+  pdfjs = await import('pdfjs-dist').catch(() => null)
+  if (pdfjs) {
+    console.log('📦 PDF.js 모듈 로드 성공 - PDF→이미지 변환 지원')
+    // PDF.js worker 설정 (Node.js 환경)
+    if (pdfjs.GlobalWorkerOptions) {
+      pdfjs.GlobalWorkerOptions.workerSrc = null
+    }
+  }
+} catch (e) {
+  console.log('📦 PDF.js 모듈 로드 실패 (optional dependency)')
+}
+
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 const port = parseInt(process.env.PORT || '3000')
@@ -933,6 +948,72 @@ async function convertPDFPageToImage(pdfUrl, pageNumber, documentTitle = '') {
   }
 }
 
+// PDF.js를 사용한 PDF→이미지 변환 함수 (ImageMagick 대체)
+async function convertPDFWithPDFJS(pdfBuffer, pageNumber, documentTitle = '') {
+  try {
+    if (!pdfjs || !canvas) {
+      throw new Error('PDF.js 또는 Canvas 모듈을 사용할 수 없음')
+    }
+
+    console.log(`🎨 PDF.js로 페이지 ${pageNumber} 변환 중... (${pdfBuffer.length} bytes)`)
+    
+    // PDF.js로 PDF 로드
+    const doc = await pdfjs.getDocument({
+      data: pdfBuffer,
+      useSystemFonts: true
+    }).promise
+    
+    console.log(`📄 PDF 로드 완료: ${doc.numPages}페이지`)
+    
+    if (pageNumber > doc.numPages) {
+      throw new Error(`페이지 ${pageNumber}는 존재하지 않음 (총 ${doc.numPages}페이지)`)
+    }
+    
+    // 해당 페이지 가져오기
+    const page = await doc.getPage(pageNumber)
+    const viewport = page.getViewport({ scale: 2.0 }) // 2x 스케일로 고화질
+    
+    console.log(`📐 페이지 크기: ${viewport.width}x${viewport.height}`)
+    
+    // Canvas 생성
+    const { createCanvas } = canvas
+    const canvasElement = createCanvas(viewport.width, viewport.height)
+    const ctx = canvasElement.getContext('2d')
+    
+    // PDF 페이지를 Canvas에 렌더링
+    const renderContext = {
+      canvasContext: ctx,
+      viewport: viewport,
+    }
+    
+    await page.render(renderContext).promise
+    console.log('✅ PDF 페이지 렌더링 완료')
+    
+    // Canvas를 PNG 버퍼로 변환
+    const pngBuffer = canvasElement.toBuffer('image/png')
+    console.log(`🖼️ PNG 변환 완료: ${pngBuffer.length} bytes`)
+    
+    // Base64 인코딩
+    const base64Image = pngBuffer.toString('base64')
+    const dataUrl = `data:image/png;base64,${base64Image}`
+    
+    return {
+      success: true,
+      method: 'pdfjs-conversion',
+      imageData: dataUrl,
+      imageSize: pngBuffer.length,
+      width: viewport.width,
+      height: viewport.height,
+      format: 'png',
+      documentTitle: documentTitle
+    }
+    
+  } catch (error) {
+    console.error(`❌ PDF.js 변환 실패:`, error.message)
+    throw error
+  }
+}
+
 // 실제 PDF 버퍼를 이미지로 변환하는 함수
 async function convertRealPDFToImage(pdfBuffer, pageNumber, documentTitle = '') {
   const { execSync } = await import('child_process')
@@ -1327,15 +1408,37 @@ async function processRealUploadedPDF(uploadData) {
       let imageDataUrl = generateFallbackPageImage(pageData.pageNumber, uploadData.fileName).dataUrl
       
       try {
-        console.log(`🖼️ 실제 PDF 페이지 ${pageData.pageNumber} 변환 시도...`)
-        const realImageResult = await convertRealPDFToImage(pdfBuffer, pageData.pageNumber, uploadData.fileName)
-        if (realImageResult.success && realImageResult.imageData) {
-          imageDataUrl = realImageResult.imageData
-          console.log(`✅ 실제 PDF 페이지 ${pageData.pageNumber} 변환 성공 (${realImageResult.imageSize} bytes)`)
-          console.log(`   이미지 데이터 URL 길이: ${imageDataUrl.length} 문자`)
+        console.log(`🖼️ PDF 페이지 ${pageData.pageNumber} 변환 시도...`)
+        
+        // 1순위: PDF.js 변환 시도 (시스템 의존성 없음)
+        let realImageResult = null
+        if (pdfjs && canvas) {
+          try {
+            realImageResult = await convertPDFWithPDFJS(pdfBuffer, pageData.pageNumber, uploadData.fileName)
+            console.log(`✅ PDF.js로 페이지 ${pageData.pageNumber} 변환 성공 (${realImageResult.imageSize} bytes)`)
+          } catch (pdfjsError) {
+            console.log(`⚠️ PDF.js 변환 실패: ${pdfjsError.message}`)
+          }
         }
+        
+        // 2순위: ImageMagick 변환 시도 (PDF.js 실패시)
+        if (!realImageResult && isImageMagickAvailable) {
+          try {
+            realImageResult = await convertRealPDFToImage(pdfBuffer, pageData.pageNumber, uploadData.fileName)
+            console.log(`✅ ImageMagick으로 페이지 ${pageData.pageNumber} 변환 성공 (${realImageResult.imageSize} bytes)`)
+          } catch (imageMagickError) {
+            console.log(`⚠️ ImageMagick 변환 실패: ${imageMagickError.message}`)
+          }
+        }
+        
+        // 변환 성공시 이미지 데이터 사용
+        if (realImageResult?.success && realImageResult?.imageData) {
+          imageDataUrl = realImageResult.imageData
+          console.log(`🎯 ${realImageResult.method} 변환 성공: ${realImageResult.imageSize} bytes`)
+        }
+        
       } catch (pdfError) {
-        console.log(`📋 PDF 페이지 ${pageData.pageNumber}: fallback 이미지 사용 (${pdfError.message.includes('ImageMagick') ? 'ImageMagick 없음' : '변환 실패'})`)
+        console.log(`📋 PDF 페이지 ${pageData.pageNumber}: fallback 이미지 사용 (변환 실패)`)
       }
       
       // 페이지 노드 생성
