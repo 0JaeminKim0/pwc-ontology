@@ -1056,7 +1056,6 @@ async function handleFileUpload(req) {
               
               // temp 디렉토리가 없으면 생성
               try {
-                const { mkdirSync, existsSync } = await import('fs')
                 if (!existsSync('./temp')) {
                   mkdirSync('./temp', { recursive: true })
                   console.log('📁 temp 디렉토리 생성됨')
