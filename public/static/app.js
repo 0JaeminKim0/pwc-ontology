@@ -1329,29 +1329,38 @@ function ReviewPanel({ reviewItems, onDecision, onClose }) {
 
 // Main App Component
 function App() {
-  const [nodes, setNodes] = useState([]);
-  const [links, setLinks] = useState([]);
-  const [highlightPath, setHighlightPath] = useState(null);
-  const [insights, setInsights] = useState([]);
+  // 안전한 초기화를 위한 기본값 설정
+  const [nodes, setNodes] = useState(() => []);
+  const [links, setLinks] = useState(() => []);
+  const [highlightPath, setHighlightPath] = useState(() => null);
+  const [insights, setInsights] = useState(() => []);
   
   // 에러 방지를 위한 안전한 상태 업데이트 함수
   const safeSetInsights = (updater) => {
     try {
-      setInsights(updater);
+      if (typeof updater === 'function') {
+        setInsights(prev => {
+          const prevArray = Array.isArray(prev) ? prev : [];
+          return updater(prevArray);
+        });
+      } else {
+        setInsights(Array.isArray(updater) ? updater : []);
+      }
     } catch (error) {
       console.error('Insights 업데이트 중 오류:', error);
       setInsights([]);
     }
   };
-  const [kpis, setKpis] = useState([
+  
+  const [kpis, setKpis] = useState(() => [
     { label: '매핑 정확도', value: '94%' },
     { label: '처리 시간', value: '2.3초' },
     { label: '자동 승인율', value: '87%' }
   ]);
-  const [lastUpdate, setLastUpdate] = useState('');
-  const [selectedPage, setSelectedPage] = useState(null);
-  const [showReviewPanel, setShowReviewPanel] = useState(false);
-  const [reviewItems, setReviewItems] = useState([]);
+  const [lastUpdate, setLastUpdate] = useState(() => '');
+  const [selectedPage, setSelectedPage] = useState(() => null);
+  const [showReviewPanel, setShowReviewPanel] = useState(() => false);
+  const [reviewItems, setReviewItems] = useState(() => []);
   
   // 패널 표시 상태 관리
   const [showControlPanel, setShowControlPanel] = useState(true);
@@ -1597,7 +1606,7 @@ function App() {
             // Show review candidates if any (통합 모드에도 온톨로지 검토 필요 항목이 있을 수 있음)
             if (result.needsReview && result.needsReview.count > 0) {
               setTimeout(() => {
-                const reviewInfo = result.needsReview.topCandidates.map(
+                const reviewInfo = (result.needsReview.topCandidates || []).map(
                   candidate => `🔍 ${candidate.text} (${(candidate.confidence * 100).toFixed(0)}%)`
                 ).join('\n');
                 

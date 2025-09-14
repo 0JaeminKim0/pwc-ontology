@@ -1012,6 +1012,14 @@ async function convertPDFWithPdf2pic(pdfBuffer, pageNumber, documentTitle = '') 
     // 특정 페이지 변환
     const result = await convert(pageNumber, { responseType: 'buffer' })
     console.log('✅ pdf2pic 변환 완료')
+    console.log('🔍 pdf2pic 결과 분석:', {
+      resultExists: !!result,
+      bufferExists: !!(result && result.buffer),
+      bufferLength: result && result.buffer ? result.buffer.length : 0,
+      resultKeys: result ? Object.keys(result) : [],
+      width: result ? result.width : 'N/A',
+      height: result ? result.height : 'N/A'
+    })
     
     // 임시 PDF 파일 정리
     try { 
@@ -1019,10 +1027,15 @@ async function convertPDFWithPdf2pic(pdfBuffer, pageNumber, documentTitle = '') 
       unlinkSync(tempPdfPath) 
     } catch {}
     
-    if (result && result.buffer) {
+    if (result && result.buffer && result.buffer.length > 0) {
       // Base64 인코딩
       const base64Image = result.buffer.toString('base64')
       const dataUrl = `data:image/png;base64,${base64Image}`
+      
+      console.log('✅ pdf2pic base64 인코딩 성공:', {
+        base64Length: base64Image.length,
+        dataUrlLength: dataUrl.length
+      })
       
       return {
         success: true,
@@ -1035,7 +1048,13 @@ async function convertPDFWithPdf2pic(pdfBuffer, pageNumber, documentTitle = '') 
         documentTitle: documentTitle
       }
     } else {
-      throw new Error('pdf2pic 변환 결과 없음')
+      const errorMsg = !result ? 'pdf2pic 변환 결과 없음' : 
+                      !result.buffer ? 'pdf2pic 결과에 buffer 없음' :
+                      result.buffer.length === 0 ? 'pdf2pic 결과 buffer가 비어있음 (0 bytes)' :
+                      'pdf2pic 결과 알 수 없는 오류'
+      
+      console.error('❌ pdf2pic 변환 실패 상세:', errorMsg)
+      throw new Error(errorMsg)
     }
     
   } catch (error) {
