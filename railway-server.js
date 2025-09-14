@@ -1054,6 +1054,17 @@ async function handleFileUpload(req) {
               const tempFileName = `temp_${timestamp}.pdf`
               const filePath = `./temp/${tempFileName}`
               
+              // temp 디렉토리가 없으면 생성
+              try {
+                const { mkdirSync, existsSync } = await import('fs')
+                if (!existsSync('./temp')) {
+                  mkdirSync('./temp', { recursive: true })
+                  console.log('📁 temp 디렉토리 생성됨')
+                }
+              } catch (dirError) {
+                console.log('⚠️ temp 디렉토리 생성 실패:', dirError.message)
+              }
+              
               writeFileSync(filePath, fileData)
               
               console.log(`💾 파일 저장 완료: ${filePath} (${fileData.length} bytes)`)
