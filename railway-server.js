@@ -6,6 +6,40 @@ import { fileURLToPath } from 'url'
 import axios from 'axios'
 import OpenAI from 'openai'
 
+// Railway 환경 진단
+console.log('🚀 Railway 환경 진단 시작...')
+console.log('📍 Node.js 버전:', process.version)
+console.log('📍 플랫폼:', process.platform)
+console.log('📍 아키텍처:', process.arch)
+console.log('📍 메모리 한도:', Math.round(process.memoryUsage().heapTotal / 1024 / 1024), 'MB')
+
+// 필수 명령어 확인
+const checkCommand = async (cmd, name) => {
+  try {
+    const { execSync } = await import('child_process')
+    const result = execSync(`which ${cmd}`, { encoding: 'utf8', timeout: 3000 }).trim()
+    console.log(`✅ ${name} 위치: ${result}`)
+    return true
+  } catch (error) {
+    console.log(`❌ ${name} 명령어 없음: ${cmd}`)
+    return false
+  }
+}
+
+// Railway 환경에서 명령어 확인
+Promise.all([
+  checkCommand('convert', 'ImageMagick'),
+  checkCommand('gs', 'Ghostscript'),
+  checkCommand('node', 'Node.js'),
+  checkCommand('npm', 'NPM')
+]).then(results => {
+  console.log('🔧 Railway 환경 진단 완료')
+  if (!results[0]) {
+    console.log('💡 ImageMagick 설치 가이드: Railway에서 apt buildpack 사용')
+    console.log('📦 .aptpakages 파일에 "imagemagick" 추가 필요')
+  }
+})
+
 // Optional dependencies - Railway 환경에서 안전하게 처리
 let pdfParse = null
 let sharp = null
@@ -943,6 +977,23 @@ async function convertRealPDFToImage(pdfBuffer, pageNumber, documentTitle = '') 
       
     } catch (convertError) {
       console.error(`❌ ImageMagick 변환 실패:`, convertError.message)
+      console.log('🔍 ImageMagick 에러 상세 정보:')
+      console.log('- 에러 코드:', convertError.code)
+      console.log('- 에러 신호:', convertError.signal)
+      console.log('- 명령어:', convertError.cmd)
+      console.log('- stderr:', convertError.stderr)
+      
+      // Railway 환경에서 ImageMagick 설치 확인
+      try {
+        const { execSync } = await import('child_process')
+        const versionCheck = execSync('convert --version', { encoding: 'utf8', timeout: 5000 })
+        console.log('✅ ImageMagick 버전:', versionCheck.split('\n')[0])
+      } catch (versionError) {
+        console.log('❌ ImageMagick이 설치되지 않음 (Railway 환경)')
+        console.log('💡 해결방안: Railway에 ImageMagick 설치 필요')
+        console.log('📦 package.json에 apt buildpack 추가 또는')
+        console.log('🐳 Docker 이미지에서 ImageMagick 사전 설치 필요')
+      }
       
       // 임시 파일 정리
       try { unlinkSync(tempPdfPath) } catch {}
@@ -1115,11 +1166,25 @@ async function processRealUploadedPDF(uploadData) {
     if (pdfParse) {
       try {
         console.log('📖 PDF 텍스트 추출 중...')
+        console.log('📝 PDF 버퍼 크기:', pdfBuffer.length, 'bytes')
+        console.log('📝 PDF 첫 20바이트:', pdfBuffer.slice(0, 20).toString())
+        
         pdfTextData = await pdfParse(pdfBuffer)
         console.log(`✅ PDF 텍스트 추출 성공: ${pdfTextData.numpages}페이지, ${pdfTextData.text.length}문자`)
+        
+        if (pdfTextData.text.length === 0) {
+          console.log('⚠️ 추출된 텍스트가 없음 - 이미지 기반 PDF이거나 보호된 PDF일 수 있음')
+          console.log('📊 PDF 메타데이터:', JSON.stringify(pdfTextData.info, null, 2))
+        } else {
+          console.log('📝 텍스트 미리보기 (첫 100자):', pdfTextData.text.substring(0, 100))
+        }
+        
       } catch (parseError) {
         console.warn('⚠️ PDF 텍스트 추출 실패:', parseError.message)
+        console.log('🔍 PDF 파싱 에러 상세:', parseError.stack)
       }
+    } else {
+      console.log('❌ pdf-parse 모듈이 로드되지 않음 - Railway 환경에서 설치 확인 필요')
     }
     
     const totalPages = pdfTextData?.numpages || Math.ceil(uploadData.fileSize / (200 * 1024)) // 추정
