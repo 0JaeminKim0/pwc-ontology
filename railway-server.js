@@ -26,6 +26,9 @@ const checkCommand = async (cmd, name) => {
   }
 }
 
+// 전역 ImageMagick 사용 가능 여부
+let isImageMagickAvailable = false
+
 // Railway 환경에서 명령어 확인
 Promise.all([
   checkCommand('convert', 'ImageMagick'),
@@ -34,9 +37,13 @@ Promise.all([
   checkCommand('npm', 'NPM')
 ]).then(results => {
   console.log('🔧 Railway 환경 진단 완료')
+  isImageMagickAvailable = results[0]
+  
   if (!results[0]) {
-    console.log('💡 ImageMagick 설치 가이드: Railway에서 apt buildpack 사용')
-    console.log('📦 .aptpakages 파일에 "imagemagick" 추가 필요')
+    console.log('💡 ImageMagick 없음 - fallback 이미지 사용')
+    console.log('📊 PDF 텍스트 추출 및 LLM 분석은 정상 작동')
+  } else {
+    console.log('✅ ImageMagick 사용 가능 - 실제 PDF 이미지 변환 지원')
   }
 })
 
@@ -933,14 +940,11 @@ async function convertRealPDFToImage(pdfBuffer, pageNumber, documentTitle = '') 
   const { join } = await import('path')
   
   try {
-    console.log(`🎨 실제 PDF 페이지 ${pageNumber} 이미지 변환 중... (${pdfBuffer.length} bytes)`)
+    console.log(`🎨 실제 PDF 페이지 ${pageNumber} 이미지 변환 시도... (${pdfBuffer.length} bytes)`)
     
-    // ImageMagick 설치 여부 먼저 확인
-    try {
-      execSync('convert --version', { timeout: 3000, stdio: 'ignore' })
-      console.log('✅ ImageMagick 설치 확인됨')
-    } catch (checkError) {
-      console.log('❌ ImageMagick 미설치 감지 - 즉시 fallback 사용')
+    // 전역 ImageMagick 사용 가능 여부 먼저 확인
+    if (!isImageMagickAvailable) {
+      console.log('📋 ImageMagick 없음 - fallback 이미지 사용')
       throw new Error('ImageMagick not available - using fallback')
     }
     
