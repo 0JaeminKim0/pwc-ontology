@@ -975,6 +975,11 @@ async function handleFileUpload(req) {
           const buffer = Buffer.concat(chunks)
           const boundaryBuffer = Buffer.from(`--${boundary}`)
           
+          console.log('🔍 디버깅 정보:')
+          console.log('- Buffer 크기:', buffer.length)
+          console.log('- Boundary:', boundary)
+          console.log('- Buffer 첫 200바이트:', buffer.slice(0, 200).toString())
+          
           // multipart 데이터 파싱
           const parts = []
           let start = 0
@@ -989,13 +994,25 @@ async function handleFileUpload(req) {
             start = boundaryIndex + boundaryBuffer.length
           }
           
+          console.log('🔍 파싱된 파트 수:', parts.length)
+          
           // 파일 파트 찾기
-          for (const part of parts) {
+          for (let i = 0; i < parts.length; i++) {
+            const part = parts[i]
+            console.log(`🔍 파트 ${i + 1} 크기:`, part.length)
+            console.log(`🔍 파트 ${i + 1} 헤더:`, part.slice(0, Math.min(200, part.length)).toString())
+            
             const headerEnd = part.indexOf('\r\n\r\n')
-            if (headerEnd === -1) continue
+            if (headerEnd === -1) {
+              console.log(`⚠️ 파트 ${i + 1}: 헤더 끝 찾지 못함`)
+              continue
+            }
             
             const headerStr = part.slice(0, headerEnd).toString()
             const fileData = part.slice(headerEnd + 4)
+            
+            console.log(`🔍 파트 ${i + 1} 헤더 내용:`, headerStr)
+            console.log(`🔍 파트 ${i + 1} 데이터 크기:`, fileData.length)
             
             if (headerStr.includes('filename=')) {
               // 파일명 추출
@@ -1015,6 +1032,7 @@ async function handleFileUpload(req) {
               
               console.log(`💾 파일 저장 완료: ${filePath} (${fileData.length} bytes)`)
               
+              console.log('✅ 파일 파트 발견 및 처리 완료')
               return resolve({
                 success: true,
                 fileName: fileName,
@@ -1022,9 +1040,12 @@ async function handleFileUpload(req) {
                 fileSize: fileData.length,
                 contentType: contentType
               })
+            } else {
+              console.log(`⚠️ 파트 ${i + 1}: filename이 없음 (일반 필드일 수 있음)`)
             }
           }
           
+          console.log('❌ 모든 파트를 확인했지만 파일을 찾지 못함')
           resolve({ success: false, error: 'No file found in upload' })
           
         } catch (parseError) {
@@ -2926,11 +2947,14 @@ const server = createServer(async (req, res) => {
         if (contentType.includes('multipart/form-data')) {
           // 실제 파일 업로드 처리
           console.log('📤 실제 파일 업로드 감지')
+          console.log('📋 Content-Type:', contentType)
+          console.log('📋 Headers:', JSON.stringify(req.headers))
           const uploadResult = await handleFileUpload(req)
           
           let processingResult
           if (uploadResult.success) {
             console.log(`📄 업로드된 파일: ${uploadResult.fileName} (${uploadResult.fileSize} bytes)`)
+            console.log('✅ multipart 파일 업로드 성공')
             
             // 업로드된 파일 데이터 생성
             const uploadData = {
@@ -2950,6 +2974,7 @@ const server = createServer(async (req, res) => {
               processingResult = generateMockPDFProcessingResult(uploadData)
             }
           } else {
+            console.log('❌ multipart 파일 업로드 실패:', uploadResult.error)
             throw new Error(`파일 업로드 실패: ${uploadResult.error}`)
           }
           
@@ -2967,10 +2992,13 @@ const server = createServer(async (req, res) => {
           
         } else {
           // JSON 데이터 처리 (기존 방식)
+          console.log('📦 JSON 데이터 처리 경로')
           let body = ''
           req.on('data', chunk => { body += chunk })
           req.on('end', async () => {
             try {
+              console.log('📋 받은 body 길이:', body.length)
+              console.log('📋 받은 body 내용:', body.substring(0, 200))
               const uploadData = JSON.parse(body)
               console.log(`📄 업로드 데이터: ${uploadData.fileName}`)
               

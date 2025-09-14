@@ -525,7 +525,19 @@ function ControlPanel({ onSearch, onUpload, onGenerateSlides, onLoadSeedOntology
   };
 
   const handleFileUpload = (event) => {
+    console.log('🔍 File input event triggered:', event.target);
+    console.log('🔍 Files array:', event.target.files);
+    console.log('🔍 Files length:', event.target.files?.length);
+    
     const file = event.target.files[0];
+    console.log('🔍 Selected file object:', file);
+    console.log('🔍 File properties:', {
+      name: file?.name,
+      size: file?.size,
+      type: file?.type,
+      lastModified: file?.lastModified
+    });
+    
     if (file) {
       setIsUploading(true);
       
@@ -540,18 +552,24 @@ function ControlPanel({ onSearch, onUpload, onGenerateSlides, onLoadSeedOntology
           fileContent: `실제 롯데케미칼 PDF 파일: ${file.name}`
         };
         
-        setTimeout(() => {
-          onUpload(fileData, 'lotte_chemical_pdf');
+        processFileUpload(file, 'lotte_chemical_pdf').then(() => {
           setIsUploading(false);
           event.target.value = '';
-        }, 3000); // 실제 PDF 처리는 더 오래 걸림
+        }).catch(error => {
+          console.error('Upload failed:', error);
+          setIsUploading(false);
+          alert(`Upload failed: ${error.message}`);
+        });
       } else {
-        // 기존 Mock 처리
-        setTimeout(() => {
-          onUpload(file, 'unified');
+        // 실제 파일 업로드 처리
+        processFileUpload(file, 'unified').then(() => {
           setIsUploading(false);
           event.target.value = '';
-        }, 2000);
+        }).catch(error => {
+          console.error('Upload failed:', error);
+          setIsUploading(false);
+          alert(`Upload failed: ${error.message}`);
+        });
       }
     }
   };
@@ -1436,12 +1454,25 @@ function App() {
     }
   };
 
-  const handleFileUpload = async (file, processingMode = 'ontology') => {
+  const processFileUpload = async (file, processingMode = 'ontology') => {
     try {
+      // 파일 선택 확인
+      if (!file) {
+        throw new Error('파일이 선택되지 않았습니다.');
+      }
+      
+      console.log('📁 선택된 파일:', {
+        name: file.name,
+        size: file.size,
+        type: file.type
+      });
+      
       // 실제 파일 업로드 (multipart/form-data) 사용
       const formData = new FormData();
       formData.append('file', file);
       formData.append('processingMode', processingMode);
+      
+      console.log('📤 FormData 생성 완료:', Array.from(formData.keys()));
       
       const response = await fetch('/api/documents/upload', {
         method: 'POST',
@@ -1700,7 +1731,7 @@ function App() {
     
     React.createElement(ControlPanel, {
       onSearch: handleSearch,
-      onUpload: handleFileUpload,
+      onUpload: processFileUpload,
       onGenerateSlides: handleGenerateSlides,
       onLoadSeedOntology: handleLoadSeedOntology,
       onResetGraph: handleResetGraph,
