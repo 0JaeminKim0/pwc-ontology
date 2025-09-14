@@ -1,8 +1,5 @@
 [phases.setup]
-nixPkgs = ['imagemagick', 'ghostscript']
+nixPkgs = ['imagemagick']
 
-[phases.build]
-cmds = ['npm ci']
-
-[phases.start]
-cmd = 'npm run start'
+[phases.install]
+cmds = ['npm ci --only=production']

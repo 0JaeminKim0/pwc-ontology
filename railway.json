@@ -1,8 +1,9 @@
 {
   "build": {
-    "builder": "dockerfile"
+    "builder": "nixpacks"
   },
   "deploy": {
+    "startCommand": "npm run start:railway",
     "healthcheckPath": "/api/health",
     "healthcheckTimeout": 30,
     "restartPolicyType": "on_failure"

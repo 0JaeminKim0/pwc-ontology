@@ -1331,7 +1331,7 @@ async function processRealUploadedPDF(uploadData) {
           console.log(`   이미지 데이터 URL 길이: ${imageDataUrl.length} 문자`)
         }
       } catch (pdfError) {
-        console.warn(`⚠️ PDF 페이지 ${pageData.pageNumber} 변환 실패, fallback 사용:`, pdfError.message)
+        console.log(`📋 PDF 페이지 ${pageData.pageNumber}: fallback 이미지 사용 (${pdfError.message.includes('ImageMagick') ? 'ImageMagick 없음' : '변환 실패'})`)
       }
       
       // 페이지 노드 생성
@@ -2672,7 +2672,7 @@ function generateFallbackPDFPages(fileName) {
           console.warn(`⚠️ PDF 페이지 ${pageData.pageNumber} 변환 결과 없음, fallback 사용`)
         }
       } catch (pdfError) {
-        console.warn(`⚠️ PDF 페이지 ${pageData.pageNumber} 변환 실패, fallback 사용:`, pdfError.message)
+        console.log(`📋 PDF 페이지 ${pageData.pageNumber}: fallback 이미지 사용 (${pdfError.message.includes('ImageMagick') ? 'ImageMagick 없음' : '변환 실패'})`)
       }
     }
     
