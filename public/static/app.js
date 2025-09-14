@@ -1137,15 +1137,15 @@ function PDFPageModal({ page, onClose }) {
                   '키워드'
                 ),
                 React.createElement('div', { className: 'flex flex-wrap gap-2' },
-                  ...(displayData.keywords || []).map((keyword, index) =>
+                  ...(Array.isArray(displayData?.keywords) ? displayData.keywords : []).map((keyword, index) =>
                     React.createElement('span', {
                       key: index,
                       className: `px-3 py-1 rounded-full text-sm font-medium ${
-                        page.type === 'ai_keyword' ? 'bg-red-100 text-red-800' :
-                        page.type === 'consulting_insight' ? 'bg-orange-100 text-orange-800' :
+                        page?.type === 'ai_keyword' ? 'bg-red-100 text-red-800' :
+                        page?.type === 'consulting_insight' ? 'bg-orange-100 text-orange-800' :
                         'bg-purple-100 text-purple-800'
                       }`
-                    }, keyword)
+                    }, keyword || '키워드')
                   )
                 )
               ),
@@ -1323,6 +1323,16 @@ function App() {
   const [links, setLinks] = useState([]);
   const [highlightPath, setHighlightPath] = useState(null);
   const [insights, setInsights] = useState([]);
+  
+  // 에러 방지를 위한 안전한 상태 업데이트 함수
+  const safeSetInsights = (updater) => {
+    try {
+      setInsights(updater);
+    } catch (error) {
+      console.error('Insights 업데이트 중 오류:', error);
+      setInsights([]);
+    }
+  };
   const [kpis, setKpis] = useState([
     { label: '매핑 정확도', value: '94%' },
     { label: '처리 시간', value: '2.3초' },
@@ -1591,23 +1601,53 @@ function App() {
   };
 
   const handleNodeClick = (node) => {
+    // 강력한 방어 코드: node가 null, undefined이거나 빈 객체인 경우 처리
+    if (!node || typeof node !== 'object') {
+      console.warn('handleNodeClick: Invalid node object', node);
+      return;
+    }
+
     if (node.type === 'pdf_page') {
       setSelectedPage(node);
-      setInsights(prev => [
+      
+      // 안전한 키워드 처리
+      let keywordText = '없음';
+      try {
+        if (node.keywords && Array.isArray(node.keywords) && node.keywords.length > 0) {
+          keywordText = node.keywords.slice(0, 3).join(', ');
+        }
+      } catch (error) {
+        console.warn('키워드 처리 중 오류:', error);
+        keywordText = '처리 오류';
+      }
+      
+      safeSetInsights(prev => [
         ...(prev || []),
         `📄 페이지 ${node.pageNumber || '?'} 선택: ${node.title || '제목 없음'}`,
-        `🔍 키워드: ${(node.keywords || []).slice(0, 3).join(', ') || '없음'}`,
+        `🔍 키워드: ${keywordText}`,
         `📊 단어 수: ${node.wordCount || 0}개`
       ]);
     } else if (node.type === 'pdf_page_image') {
       // PDF 이미지 노드 클릭 처리
       setSelectedPage(node);
-      setInsights(prev => [
+      
+      // 안전한 키워드 처리
+      let keywordText = '없음';
+      try {
+        if (node.metadata?.keywords && Array.isArray(node.metadata.keywords) && node.metadata.keywords.length > 0) {
+          keywordText = node.metadata.keywords.slice(0, 3).join(', ');
+        }
+      } catch (error) {
+        console.warn('이미지 노드 키워드 처리 중 오류:', error);
+        keywordText = '처리 오류';
+      }
+      
+      safeSetInsights(prev => [
         ...(prev || []),
         `🖼️ 페이지 이미지 ${node.pageNumber || '?'} 선택: ${node.metadata?.title || '제목 없음'}`,
         `📐 크기: ${node.width || '?'} x ${node.height || '?'}`,
         `📊 종횡비: ${node.aspectRatio?.toFixed(2) || '?'}`,
-        `🔍 키워드: ${(node.metadata?.keywords || []).slice(0, 3).join(', ') || '없음'}`,
+        `🔍 키워드: ${keywordText}`,
         `📝 요약: ${node.metadata?.summary || '요약 없음'}`
       ]);
     } else if (node.type === 'ai_keyword') {
