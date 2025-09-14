@@ -70,19 +70,51 @@ try {
   console.log('📦 canvas 모듈 로드 실패 (optional dependency)')
 }
 
-// PDF.js 로드 시도 (ImageMagick 대체)
+// Promise.withResolvers polyfill (Node.js 22 미만 버전 지원)
+if (!Promise.withResolvers) {
+  Promise.withResolvers = function() {
+    let resolve, reject;
+    const promise = new Promise((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  };
+  console.log('🔧 Promise.withResolvers polyfill 적용됨');
+}
+
+// PDF→이미지 변환 모듈들 로드 시도
 let pdfjs = null
+let pdf2pic = null
+
 try {
-  pdfjs = await import('pdfjs-dist').catch(() => null)
+  // pdf2pic 시도 (더 안정적)
+  pdf2pic = await import('pdf2pic').then(m => m.default || m).catch(() => null)
+  if (pdf2pic) {
+    console.log('📦 pdf2pic 모듈 로드 성공 - PDF→이미지 변환 지원')
+  }
+} catch (e) {
+  console.log('📦 pdf2pic 모듈 로드 실패:', e.message)
+}
+
+try {
+  // PDF.js 시도 (polyfill 추가)
+  pdfjs = await import('pdfjs-dist/legacy/build/pdf.js').catch(() => null)
+  
+  if (!pdfjs) {
+    pdfjs = await import('pdfjs-dist').catch(() => null)
+  }
+  
   if (pdfjs) {
     console.log('📦 PDF.js 모듈 로드 성공 - PDF→이미지 변환 지원')
-    // PDF.js worker 설정 (Node.js 환경)
+    console.log('📍 Node.js 버전:', process.version)
+    
     if (pdfjs.GlobalWorkerOptions) {
       pdfjs.GlobalWorkerOptions.workerSrc = null
     }
   }
 } catch (e) {
-  console.log('📦 PDF.js 모듈 로드 실패 (optional dependency)')
+  console.log('📦 PDF.js 모듈 로드 실패:', e.message)
 }
 
 const __filename = fileURLToPath(import.meta.url)
@@ -948,6 +980,69 @@ async function convertPDFPageToImage(pdfUrl, pageNumber, documentTitle = '') {
   }
 }
 
+// pdf2pic을 사용한 PDF→이미지 변환 함수 (가장 안정적)
+async function convertPDFWithPdf2pic(pdfBuffer, pageNumber, documentTitle = '') {
+  try {
+    if (!pdf2pic) {
+      throw new Error('pdf2pic 모듈을 사용할 수 없음')
+    }
+
+    console.log(`🎨 pdf2pic으로 페이지 ${pageNumber} 변환 중... (${pdfBuffer.length} bytes)`)
+    
+    // 임시 파일 생성
+    const tempDir = './temp'
+    if (!existsSync(tempDir)) {
+      mkdirSync(tempDir, { recursive: true })
+    }
+    
+    const tempPdfPath = `./temp/temp_${Date.now()}_${pageNumber}.pdf`
+    writeFileSync(tempPdfPath, pdfBuffer)
+    
+    // pdf2pic 설정
+    const convert = pdf2pic.fromPath(tempPdfPath, {
+      density: 200,           // DPI
+      saveFilename: `page_${pageNumber}`,
+      savePath: tempDir,
+      format: 'png',
+      width: 800,            // 최대 너비
+      height: 1200,          // 최대 높이
+    })
+    
+    // 특정 페이지 변환
+    const result = await convert(pageNumber, { responseType: 'buffer' })
+    console.log('✅ pdf2pic 변환 완료')
+    
+    // 임시 PDF 파일 정리
+    try { 
+      const { unlinkSync } = await import('fs')
+      unlinkSync(tempPdfPath) 
+    } catch {}
+    
+    if (result && result.buffer) {
+      // Base64 인코딩
+      const base64Image = result.buffer.toString('base64')
+      const dataUrl = `data:image/png;base64,${base64Image}`
+      
+      return {
+        success: true,
+        method: 'pdf2pic-conversion',
+        imageData: dataUrl,
+        imageSize: result.buffer.length,
+        width: result.width || 800,
+        height: result.height || 1200,
+        format: 'png',
+        documentTitle: documentTitle
+      }
+    } else {
+      throw new Error('pdf2pic 변환 결과 없음')
+    }
+    
+  } catch (error) {
+    console.error(`❌ pdf2pic 변환 실패:`, error.message)
+    throw error
+  }
+}
+
 // PDF.js를 사용한 PDF→이미지 변환 함수 (ImageMagick 대체)
 async function convertPDFWithPDFJS(pdfBuffer, pageNumber, documentTitle = '') {
   try {
@@ -957,11 +1052,15 @@ async function convertPDFWithPDFJS(pdfBuffer, pageNumber, documentTitle = '') {
 
     console.log(`🎨 PDF.js로 페이지 ${pageNumber} 변환 중... (${pdfBuffer.length} bytes)`)
     
-    // PDF.js로 PDF 로드
-    const doc = await pdfjs.getDocument({
+    // PDF.js로 PDF 로드 (Node.js 환경 최적화)
+    const loadingTask = pdfjs.getDocument({
       data: pdfBuffer,
-      useSystemFonts: true
-    }).promise
+      useSystemFonts: true,
+      disableFontFace: true, // Node.js에서 폰트 문제 방지
+      verbosity: 0, // 로그 레벨 최소화
+    })
+    
+    const doc = await loadingTask.promise
     
     console.log(`📄 PDF 로드 완료: ${doc.numPages}페이지`)
     
@@ -1410,9 +1509,20 @@ async function processRealUploadedPDF(uploadData) {
       try {
         console.log(`🖼️ PDF 페이지 ${pageData.pageNumber} 변환 시도...`)
         
-        // 1순위: PDF.js 변환 시도 (시스템 의존성 없음)
         let realImageResult = null
-        if (pdfjs && canvas) {
+        
+        // 1순위: pdf2pic 변환 시도 (가장 안정적)
+        if (pdf2pic) {
+          try {
+            realImageResult = await convertPDFWithPdf2pic(pdfBuffer, pageData.pageNumber, uploadData.fileName)
+            console.log(`✅ pdf2pic로 페이지 ${pageData.pageNumber} 변환 성공 (${realImageResult.imageSize} bytes)`)
+          } catch (pdf2picError) {
+            console.log(`⚠️ pdf2pic 변환 실패: ${pdf2picError.message}`)
+          }
+        }
+        
+        // 2순위: PDF.js 변환 시도 (pdf2pic 실패시)
+        if (!realImageResult && pdfjs && canvas) {
           try {
             realImageResult = await convertPDFWithPDFJS(pdfBuffer, pageData.pageNumber, uploadData.fileName)
             console.log(`✅ PDF.js로 페이지 ${pageData.pageNumber} 변환 성공 (${realImageResult.imageSize} bytes)`)
@@ -1421,7 +1531,7 @@ async function processRealUploadedPDF(uploadData) {
           }
         }
         
-        // 2순위: ImageMagick 변환 시도 (PDF.js 실패시)
+        // 3순위: ImageMagick 변환 시도 (다른 방법 실패시)
         if (!realImageResult && isImageMagickAvailable) {
           try {
             realImageResult = await convertRealPDFToImage(pdfBuffer, pageData.pageNumber, uploadData.fileName)
