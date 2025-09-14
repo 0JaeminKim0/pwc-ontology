@@ -977,21 +977,47 @@ async function handleFileUpload(req) {
           
           console.log('🔍 디버깅 정보:')
           console.log('- Buffer 크기:', buffer.length)
-          console.log('- Boundary:', boundary)
+          console.log('- Original boundary:', boundary)
+          console.log('- Boundary buffer:', boundaryBuffer.toString())
           console.log('- Buffer 첫 200바이트:', buffer.slice(0, 200).toString())
+          console.log('- Buffer 마지막 200바이트:', buffer.slice(-200).toString())
+          
+          // Boundary가 buffer에서 실제로 발견되는지 확인
+          const boundaryCheck = buffer.indexOf(boundaryBuffer)
+          console.log('🔍 첫 번째 boundary 위치:', boundaryCheck)
+          
+          if (boundaryCheck === -1) {
+            // boundary 변형 시도
+            const altBoundary1 = Buffer.from(`\r\n--${boundary}`)
+            const altBoundary2 = Buffer.from(`\n--${boundary}`)
+            console.log('🔍 대체 boundary 1 (\\r\\n--) 위치:', buffer.indexOf(altBoundary1))
+            console.log('🔍 대체 boundary 2 (\\n--) 위치:', buffer.indexOf(altBoundary2))
+          }
           
           // multipart 데이터 파싱
           const parts = []
           let start = 0
+          let partCount = 0
           
           while (true) {
             const boundaryIndex = buffer.indexOf(boundaryBuffer, start)
+            console.log(`🔍 파싱 루프 ${partCount + 1}: start=${start}, boundaryIndex=${boundaryIndex}`)
+            
             if (boundaryIndex === -1) break
             
             if (start !== 0) {
-              parts.push(buffer.slice(start, boundaryIndex))
+              const partData = buffer.slice(start, boundaryIndex)
+              parts.push(partData)
+              console.log(`🔍 파트 ${parts.length} 추가: 크기=${partData.length}`)
             }
             start = boundaryIndex + boundaryBuffer.length
+            partCount++
+            
+            // 무한 루프 방지
+            if (partCount > 10) {
+              console.log('⚠️ 파싱 루프 제한 도달 (10회)')
+              break
+            }
           }
           
           console.log('🔍 파싱된 파트 수:', parts.length)

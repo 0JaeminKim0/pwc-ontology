@@ -1469,8 +1469,27 @@ function App() {
       
       // 실제 파일 업로드 (multipart/form-data) 사용
       const formData = new FormData();
+      console.log('🔍 FormData 생성 전 파일 확인:', file);
+      console.log('🔍 File 객체 유형:', Object.prototype.toString.call(file));
+      console.log('🔍 File 생성자:', file.constructor.name);
+      
       formData.append('file', file);
       formData.append('processingMode', processingMode);
+      
+      console.log('🔍 FormData 생성 완료');
+      console.log('🔍 FormData entries:');
+      for (let [key, value] of formData.entries()) {
+        if (value instanceof File) {
+          console.log(`  ${key}:`, {
+            name: value.name,
+            size: value.size,
+            type: value.type,
+            lastModified: value.lastModified
+          });
+        } else {
+          console.log(`  ${key}:`, value);
+        }
+      }
       
       console.log('📤 FormData 생성 완료:', Array.from(formData.keys()));
       
