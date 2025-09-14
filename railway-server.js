@@ -1175,6 +1175,11 @@ async function processRealUploadedPDF(uploadData) {
         if (pdfTextData.text.length === 0) {
           console.log('⚠️ 추출된 텍스트가 없음 - 이미지 기반 PDF이거나 보호된 PDF일 수 있음')
           console.log('📊 PDF 메타데이터:', JSON.stringify(pdfTextData.info, null, 2))
+        console.log('🔍 PDF 파일 특성 분석:')
+        console.log('  - 이미지 기반 PDF 여부: 높음 (텍스트 0문자)')
+        console.log('  - OCR 필요성: 높음')
+        console.log('  - LLM 분석 가능성: 낮음 (텍스트 없음)')
+        console.log('💡 권장사항: OCR 처리 또는 이미지 분석 AI 사용')
         } else {
           console.log('📝 텍스트 미리보기 (첫 100자):', pdfTextData.text.substring(0, 100))
         }
@@ -1193,8 +1198,14 @@ async function processRealUploadedPDF(uploadData) {
     // LLM 분석 시도
     let allPDFPages = []
     if (pdfTextData && pdfTextData.text.length > 0) {
-      console.log('🤖 LLM 분석 시작...')
+      console.log('🤖 LLM 메타데이터 추출 분석 시작...')
       console.log(`📊 전체 텍스트: ${pdfTextData.text.length} 문자, ${totalPages} 페이지`)
+      console.log('🔍 LLM이 추출할 메타데이터 유형:')
+      console.log('  - 페이지별 제목/부제목')
+      console.log('  - 핵심 메시지 및 키워드')
+      console.log('  - 문서 의도 및 목적')
+      console.log('  - 데이터 소스 및 KPI')
+      console.log('  - 리스크 및 의사결정 요소')
       
       const textPerPage = Math.ceil(pdfTextData.text.length / totalPages)
       console.log(`📄 페이지당 예상 텍스트: ${textPerPage} 문자`)
@@ -1267,9 +1278,19 @@ async function processRealUploadedPDF(uploadData) {
       console.log(`🤖 LLM 분석 완료: ${allPDFPages.length}개 페이지 처리됨`)
     }
     
-    // LLM 분석이 실패하면 실제 텍스트 기반 fallback 사용
+    // LLM 메타데이터 추출이 실패하면 실제 텍스트 기반 fallback 사용
     if (allPDFPages.length === 0) {
-      console.log('⚠️ LLM 분석 실패, 실제 텍스트 기반 fallback 데이터 사용')
+      console.log('⚠️ LLM 메타데이터 추출 실패 - 원인 분석:')
+      if (!pdfTextData || pdfTextData.text.length === 0) {
+        console.log('  - PDF 텍스트 추출 실패 (이미지 기반 PDF)')
+        console.log('  - OCR 없이는 LLM 분석 불가능')
+      } else if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === 'sk-dummy-key-for-demo') {
+        console.log('  - OpenAI API 키 없음 또는 데모 키 사용')
+        console.log('  - LLM 메타데이터 추출 비활성화')
+      } else {
+        console.log('  - LLM API 호출 실패 또는 응답 파싱 오류')
+      }
+      console.log('📝 실제 텍스트 기반 fallback 메타데이터 생성 중...')
       allPDFPages = generateEnhancedFallbackPDFPages(uploadData.fileName, totalPages, pdfTextData?.text || '')
     }
     
