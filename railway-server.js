@@ -3,6 +3,7 @@ import { createServer } from 'http'
 import { readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync } from 'fs'
 import { join, extname, dirname } from 'path'
 import { fileURLToPath } from 'url'
+import { parseMultipartData, validateFileData } from './multipart-parser.js'
 import axios from 'axios'
 import OpenAI from 'openai'
 
@@ -1202,6 +1203,7 @@ async function convertRealPDFToImage(pdfBuffer, pageNumber, documentTitle = '') 
 }
 
 // 실제 파일 업로드 처리 함수 (multipart/form-data)
+// 🚀 개선된 파일 업로드 처리 함수 (강력한 multipart 파싱)
 async function handleFileUpload(req) {
   return new Promise((resolve, reject) => {
     try {
@@ -1209,139 +1211,138 @@ async function handleFileUpload(req) {
       const contentType = req.headers['content-type'] || ''
       const boundary = contentType.split('boundary=')[1]
       
+      console.log('🔄 파일 업로드 처리 시작')
+      console.log('📋 Content-Type:', contentType)
+      console.log('🔍 Boundary:', boundary)
+      
       if (!boundary) {
-        return resolve({ success: false, error: 'No boundary found' })
+        return resolve({ success: false, error: 'No boundary found in Content-Type' })
       }
       
-      req.on('data', chunk => chunks.push(chunk))
+      req.on('data', chunk => {
+        chunks.push(chunk)
+        console.log(`📦 청크 수신: ${chunk.length} bytes (총 ${chunks.length}개)`)
+      })
+      
       req.on('end', () => {
         try {
           const buffer = Buffer.concat(chunks)
-          const boundaryBuffer = Buffer.from(`--${boundary}`)
+          console.log(`📦 전체 데이터 수신 완료: ${buffer.length} bytes`)
           
-          console.log('🔍 디버깅 정보:')
-          console.log('- Buffer 크기:', buffer.length)
-          console.log('- Original boundary:', boundary)
-          console.log('- Boundary buffer:', boundaryBuffer.toString())
-          console.log('- Buffer 첫 200바이트:', buffer.slice(0, 200).toString())
-          console.log('- Buffer 마지막 200바이트:', buffer.slice(-200).toString())
+          // 🔧 새로운 multipart 파서 사용
+          const parts = parseMultipartData(buffer, boundary)
           
-          // Boundary가 buffer에서 실제로 발견되는지 확인
-          const boundaryCheck = buffer.indexOf(boundaryBuffer)
-          console.log('🔍 첫 번째 boundary 위치:', boundaryCheck)
-          
-          if (boundaryCheck === -1) {
-            // boundary 변형 시도
-            const altBoundary1 = Buffer.from(`\r\n--${boundary}`)
-            const altBoundary2 = Buffer.from(`\n--${boundary}`)
-            console.log('🔍 대체 boundary 1 (\\r\\n--) 위치:', buffer.indexOf(altBoundary1))
-            console.log('🔍 대체 boundary 2 (\\n--) 위치:', buffer.indexOf(altBoundary2))
+          if (parts.length === 0) {
+            console.error('❌ multipart 파싱 실패: 파트를 찾을 수 없음')
+            return resolve({ success: false, error: 'No parts found in multipart data' })
           }
           
-          // multipart 데이터 파싱
-          const parts = []
-          let start = 0
-          let partCount = 0
+          console.log(`📄 총 ${parts.length}개 파트 파싱됨`)
           
-          while (true) {
-            const boundaryIndex = buffer.indexOf(boundaryBuffer, start)
-            console.log(`🔍 파싱 루프 ${partCount + 1}: start=${start}, boundaryIndex=${boundaryIndex}`)
-            
-            if (boundaryIndex === -1) break
-            
-            if (start !== 0) {
-              const partData = buffer.slice(start, boundaryIndex)
-              parts.push(partData)
-              console.log(`🔍 파트 ${parts.length} 추가: 크기=${partData.length}`)
-            }
-            start = boundaryIndex + boundaryBuffer.length
-            partCount++
-            
-            // 무한 루프 방지
-            if (partCount > 10) {
-              console.log('⚠️ 파싱 루프 제한 도달 (10회)')
-              break
-            }
-          }
+          // 🔍 파일 파트 검색 (더 유연한 조건)
+          let fileFound = false
           
-          console.log('🔍 파싱된 파트 수:', parts.length)
-          
-          // 파일 파트 찾기
           for (let i = 0; i < parts.length; i++) {
             const part = parts[i]
-            console.log(`🔍 파트 ${i + 1} 크기:`, part.length)
-            console.log(`🔍 파트 ${i + 1} 헤더:`, part.slice(0, Math.min(200, part.length)).toString())
+            console.log(`\n🔍 파트 ${i + 1} 검사:`)
+            console.log(`   필드명: ${part.fieldName}`)
+            console.log(`   파일명: ${part.fileName || 'N/A'}`)
+            console.log(`   크기: ${part.size} bytes`)
+            console.log(`   파일 여부: ${part.isFile}`)
             
-            const headerEnd = part.indexOf('\r\n\r\n')
-            if (headerEnd === -1) {
-              console.log(`⚠️ 파트 ${i + 1}: 헤더 끝 찾지 못함`)
-              continue
-            }
-            
-            const headerStr = part.slice(0, headerEnd).toString()
-            const fileData = part.slice(headerEnd + 4)
-            
-            console.log(`🔍 파트 ${i + 1} 헤더 내용:`, headerStr)
-            console.log(`🔍 파트 ${i + 1} 데이터 크기:`, fileData.length)
-            
-            if (headerStr.includes('filename=')) {
-              // 파일명 추출
-              const filenameMatch = headerStr.match(/filename="([^"]+)"/)
-              const fileName = filenameMatch ? filenameMatch[1] : 'uploaded_file.pdf'
+            // 파일 데이터 검증
+            if (part.data && part.data.length > 0) {
+              const validation = validateFileData(part.data, part.fileName)
+              console.log(`   검증 결과:`, validation)
               
-              // Content-Type 추출
-              const contentTypeMatch = headerStr.match(/Content-Type:\s*([^\r\n]+)/)
-              const contentType = contentTypeMatch ? contentTypeMatch[1] : 'application/pdf'
+              // 파일 조건: filename이 있거나, 큰 크기의 바이너리 데이터이거나, PDF 매직 넘버가 있는 경우
+              const isLikelyFile = part.isFile || 
+                                 part.size > 1000 || 
+                                 validation.isPDF ||
+                                 (part.fieldName === 'file' && part.size > 50)
               
-              // 파일 저장
-              const timestamp = Date.now()
-              const tempFileName = `temp_${timestamp}.pdf`
-              const filePath = `./temp/${tempFileName}`
-              
-              // temp 디렉토리가 없으면 생성
-              try {
-                if (!existsSync('./temp')) {
-                  mkdirSync('./temp', { recursive: true })
-                  console.log('📁 temp 디렉토리 생성됨')
+              if (isLikelyFile && !validation.isObjectString) {
+                console.log(`✅ 파일 파트 발견! 처리 중...`)
+                
+                // 파일명 결정
+                let fileName = part.fileName || 'uploaded_file.pdf'
+                if (!fileName.endsWith('.pdf')) {
+                  fileName = fileName + '.pdf'
                 }
-              } catch (dirError) {
-                console.log('⚠️ temp 디렉토리 생성 실패:', dirError.message)
+                
+                // 임시 파일 저장
+                const timestamp = Date.now()
+                const tempFileName = `temp_${timestamp}.pdf`
+                const filePath = `./temp/${tempFileName}`
+                
+                // temp 디렉토리 생성
+                try {
+                  if (!existsSync('./temp')) {
+                    mkdirSync('./temp', { recursive: true })
+                    console.log('📁 temp 디렉토리 생성됨')
+                  }
+                } catch (dirError) {
+                  console.log('⚠️ temp 디렉토리 생성 실패:', dirError.message)
+                }
+                
+                // 파일 데이터 저장
+                writeFileSync(filePath, part.data)
+                
+                console.log(`💾 파일 저장 성공: ${filePath}`)
+                console.log(`📊 파일 정보: ${fileName} (${part.size} bytes, ${part.contentType})`)
+                
+                fileFound = true
+                return resolve({
+                  success: true,
+                  fileName: fileName,
+                  filePath: filePath,
+                  fileSize: part.size,
+                  contentType: part.contentType,
+                  validation: validation
+                })
+              } else if (validation.isObjectString) {
+                console.warn(`⚠️ 파트 ${i + 1}: [object Object] 문자열 감지 - 브라우저 FormData 문제`)
               }
-              
-              writeFileSync(filePath, fileData)
-              
-              console.log(`💾 파일 저장 완료: ${filePath} (${fileData.length} bytes)`)
-              
-              console.log('✅ 파일 파트 발견 및 처리 완료')
-              return resolve({
-                success: true,
-                fileName: fileName,
-                filePath: filePath,
-                fileSize: fileData.length,
-                contentType: contentType
-              })
-            } else {
-              console.log(`⚠️ 파트 ${i + 1}: filename이 없음 (일반 필드일 수 있음)`)
             }
           }
           
-          console.log('❌ 모든 파트를 확인했지만 파일을 찾지 못함')
-          resolve({ success: false, error: 'No file found in upload' })
+          if (!fileFound) {
+            console.error('❌ 유효한 파일을 찾지 못함')
+            console.log('📋 디버깅 정보 - 모든 파트:')
+            parts.forEach((part, idx) => {
+              console.log(`   파트 ${idx + 1}: ${part.fieldName} (${part.size} bytes) - ${part.isFile ? '파일' : '텍스트'}`)
+            })
+            
+            return resolve({ 
+              success: false, 
+              error: 'No valid file found in upload',
+              debug: {
+                totalParts: parts.length,
+                parts: parts.map(p => ({
+                  fieldName: p.fieldName,
+                  fileName: p.fileName,
+                  size: p.size,
+                  isFile: p.isFile
+                }))
+              }
+            })
+          }
           
         } catch (parseError) {
-          console.error('❌ 파일 업로드 파싱 실패:', parseError)
-          resolve({ success: false, error: parseError.message })
+          console.error('❌ 개선된 파일 업로드 파싱 실패:', parseError)
+          console.error('Stack:', parseError.stack)
+          resolve({ success: false, error: `Parsing failed: ${parseError.message}` })
         }
       })
       
       req.on('error', (error) => {
         console.error('❌ 파일 업로드 요청 실패:', error)
-        resolve({ success: false, error: error.message })
+        resolve({ success: false, error: `Request failed: ${error.message}` })
       })
       
     } catch (error) {
       console.error('❌ 파일 업로드 처리 실패:', error)
-      resolve({ success: false, error: error.message })
+      resolve({ success: false, error: `Handler failed: ${error.message}` })
     }
   })
 }

@@ -1,16 +1,9 @@
 import { defineConfig } from 'vite'
+import pages from '@hono/vite-cloudflare-pages'
 
-// Railway에서는 railway-server.js를 직접 사용하므로 Vite 빌드 불필요
-// 단순한 설정으로 빌드 에러 방지
 export default defineConfig({
+  plugins: [pages()],
   build: {
-    outDir: 'dist',
-    rollupOptions: {
-      external: ['fs', 'path', 'http', 'url']
-    }
-  },
-  server: {
-    port: 3000,
-    host: '0.0.0.0'
+    outDir: 'dist'
   }
 })
