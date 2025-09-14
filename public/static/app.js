@@ -552,6 +552,11 @@ function ControlPanel({ onSearch, onUpload, onGenerateSlides, onLoadSeedOntology
           fileContent: `실제 롯데케미칼 PDF 파일: ${file.name}`
         };
         
+        console.log('🚀 롯데케미칼 파일 - onUpload 호출 전:', {
+          file: file,
+          fileType: typeof file,
+          isFile: file instanceof File
+        });
         onUpload(file, 'lotte_chemical_pdf').then(() => {
           setIsUploading(false);
           event.target.value = '';
@@ -562,6 +567,11 @@ function ControlPanel({ onSearch, onUpload, onGenerateSlides, onLoadSeedOntology
         });
       } else {
         // 실제 파일 업로드 처리
+        console.log('🚀 일반 파일 - onUpload 호출 전:', {
+          file: file,
+          fileType: typeof file,
+          isFile: file instanceof File
+        });
         onUpload(file, 'unified').then(() => {
           setIsUploading(false);
           event.target.value = '';
@@ -1471,10 +1481,15 @@ function App() {
         throw new Error('파일이 선택되지 않았습니다.');
       }
       
-      console.log('📁 선택된 파일:', {
+      console.log('📁 processFileUpload 함수 진입 - 파일 확인:', {
+        file: file,
+        fileType: typeof file,
+        isFile: file instanceof File,
+        constructor: file.constructor?.name,
         name: file.name,
         size: file.size,
-        type: file.type
+        type: file.type,
+        toString: file.toString()
       });
       
       // 실제 파일 업로드 (multipart/form-data) 사용
@@ -1494,7 +1509,9 @@ function App() {
             name: value.name,
             size: value.size,
             type: value.type,
-            lastModified: value.lastModified
+            lastModified: value.lastModified,
+            constructor: value.constructor.name,
+            toString: value.toString()
           });
         } else {
           console.log(`  ${key}:`, value);
