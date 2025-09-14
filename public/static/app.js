@@ -1137,7 +1137,7 @@ function PDFPageModal({ page, onClose }) {
                   '키워드'
                 ),
                 React.createElement('div', { className: 'flex flex-wrap gap-2' },
-                  ...displayData.keywords.map((keyword, index) =>
+                  ...(displayData.keywords || []).map((keyword, index) =>
                     React.createElement('span', {
                       key: index,
                       className: `px-3 py-1 rounded-full text-sm font-medium ${
@@ -1594,21 +1594,21 @@ function App() {
     if (node.type === 'pdf_page') {
       setSelectedPage(node);
       setInsights(prev => [
-        ...prev,
-        `📄 페이지 ${node.pageNumber} 선택: ${node.title}`,
-        `🔍 키워드: ${node.keywords.slice(0, 3).join(', ')}`,
-        `📊 단어 수: ${node.wordCount}개`
+        ...(prev || []),
+        `📄 페이지 ${node.pageNumber || '?'} 선택: ${node.title || '제목 없음'}`,
+        `🔍 키워드: ${(node.keywords || []).slice(0, 3).join(', ') || '없음'}`,
+        `📊 단어 수: ${node.wordCount || 0}개`
       ]);
     } else if (node.type === 'pdf_page_image') {
       // PDF 이미지 노드 클릭 처리
       setSelectedPage(node);
       setInsights(prev => [
-        ...prev,
-        `🖼️ 페이지 이미지 ${node.pageNumber} 선택: ${node.metadata?.title}`,
-        `📐 크기: ${node.width} x ${node.height}`,
-        `📊 종횡비: ${node.aspectRatio?.toFixed(2)}`,
-        `🔍 키워드: ${node.metadata?.keywords?.slice(0, 3).join(', ')}`,
-        `📝 요약: ${node.metadata?.summary}`
+        ...(prev || []),
+        `🖼️ 페이지 이미지 ${node.pageNumber || '?'} 선택: ${node.metadata?.title || '제목 없음'}`,
+        `📐 크기: ${node.width || '?'} x ${node.height || '?'}`,
+        `📊 종횡비: ${node.aspectRatio?.toFixed(2) || '?'}`,
+        `🔍 키워드: ${(node.metadata?.keywords || []).slice(0, 3).join(', ') || '없음'}`,
+        `📝 요약: ${node.metadata?.summary || '요약 없음'}`
       ]);
     } else if (node.type === 'ai_keyword') {
       // 🔥 AI 키워드 노드 클릭 처리
