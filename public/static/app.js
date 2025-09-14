@@ -552,7 +552,7 @@ function ControlPanel({ onSearch, onUpload, onGenerateSlides, onLoadSeedOntology
           fileContent: `실제 롯데케미칼 PDF 파일: ${file.name}`
         };
         
-        processFileUpload(file, 'lotte_chemical_pdf').then(() => {
+        onUpload(file, 'lotte_chemical_pdf').then(() => {
           setIsUploading(false);
           event.target.value = '';
         }).catch(error => {
@@ -562,7 +562,7 @@ function ControlPanel({ onSearch, onUpload, onGenerateSlides, onLoadSeedOntology
         });
       } else {
         // 실제 파일 업로드 처리
-        processFileUpload(file, 'unified').then(() => {
+        onUpload(file, 'unified').then(() => {
           setIsUploading(false);
           event.target.value = '';
         }).catch(error => {
