@@ -1,25 +1,35 @@
-# Railway 배포용 Dockerfile - Node.js 20으로 업데이트
-FROM node:20-alpine
+# Railway 전용 Dockerfile with ImageMagick
+FROM node:20-slim
 
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    imagemagick \
+    ghostscript \
+    libgs-dev \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Configure ImageMagick security policy
+RUN sed -i 's/<policy domain="coder" rights="none" pattern="PDF" \/>/<policy domain="coder" rights="read|write" pattern="PDF" \/>/g' /etc/ImageMagick-6/policy.xml
+
+# Set working directory
 WORKDIR /app
 
-# Alpine에서 Python과 build tools 설치 (optional dependencies용)
-RUN apk add --no-cache python3 make g++ cairo-dev pango-dev giflib-dev
-
-# package files 복사
+# Copy package files
 COPY package*.json ./
 
-# 의존성 설치 (optional dependencies 실패해도 계속 진행)
-RUN npm ci --only=production --ignore-optional || npm ci --only=production --no-optional
+# Install Node.js dependencies
+RUN npm ci --only=production
 
-# 소스 코드 복사
+# Copy source code
 COPY . .
 
-# dist 디렉토리 생성
-RUN mkdir -p dist
-
-# 포트 노출
+# Expose port
 EXPOSE 3000
 
-# Railway 시작 명령어
-CMD ["node", "railway-server.js"]
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:3000/api/health || exit 1
+
+# Start command
+CMD ["npm", "run", "start:railway"]
